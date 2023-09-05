@@ -1,0 +1,12 @@
+name: ted
+
+channels:
+    - conda-forge
+
+dependencies:
+    - python=3.10
+    - geopandas
+    - openjdk
+    - pyyaml
+    - joblib
+    - jpype1
