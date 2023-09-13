@@ -2,6 +2,7 @@
 import os
 import datetime
 import shutil
+import sys
 
 import geopandas as gpd
 from r5py import TravelTimeMatrixComputer, TransportNetwork
@@ -15,110 +16,108 @@ WEEKEND_DELTA = 5
 #: The number of days since Monday to count as a weekday (e.g. Wednesday = 2)
 WEEKDAY_DELTA = 2
 
+"""Here's the idea
+
+- Create a run folder structure from a YAML object
+
+"""
+
 
 class Run:
     def __init__(
         self,
-        id: str,
-        region_config_file: str,
+        run_id: str,
+        description: str,
+        output_folder: str,
         week_of: datetime.date,
-        gtfs,
-        gpkg,
-        osm,
-        start_time,
-        duration,
-        max_time,
+        regions: dict,
     ):
-        self.id = id
-        self.region_config_file = region_config_file
+        self.run_id = run_id
+        self.description = description
+        self.output_folder = output_folder
         self.week_of = week_of
-        self.gtfs = gtfs
-        self.gpkg = gpkg
-        self.osm = osm
-        self.start_time = start_time
-        self.duration = duration
-        self.max_time = max_time
+        self.regions = regions
 
-        # Load in region configuration file
-        with open(self.region_config_file) as infile:
-            self.region = yaml.safe_load(infile)
-
-        # Grab all the filenames in the filepath
-        self.gtfs_files = []
-        for filename in os.listdir(self.gtfs):
-            self.gtfs_files.append(os.path.join(self.gtfs, filename))
-
-        # Grab the spatial data
-        self.centroids = gpd.read_file(self.gpkg, layer="bg_centroids")
+        self.base_folder = os.path.join(self.output_folder, self.run_id)
+        # Create the run folder if it doesn't exist
+        create_folder_safely(self.base_folder)
 
     @classmethod
     def from_yaml(cls, yaml_filepath):
         with open(yaml_filepath) as infile:
             c = yaml.safe_load(infile)
         return cls(
-            c["id"],
-            c["region_config_file"],
-            c["week_of"],
-            c["gtfs"],
-            c["gpkg"],
-            c["osm"],
-            c["start_time"],
-            c["duration"],
-            c["max_time"],
+            run_id=c["run_id"],
+            description=c["description"],
+            output_folder=c["output_folder"],
+            week_of=c["week_of"],
+            regions=c["regions"],
         )
 
-    def generate_matrix(self):
-        network = TransportNetwork(self.osm, self.gtfs_files)
+    def run_regions(self):
+        """Run all regions and runs for the specified analysis."""
+        for region_key, region in self.regions.items():
+            print(f"Running {region['name']}")
 
-        ttmc = TravelTimeMatrixComputer(
-            network,
-            origins=self.centroids,
-            destinations=self.centroids,
-        )
+            # Create a folder for it if it doesn't exist
+            region_folder = os.path.join(self.base_folder, region_key)
+            create_folder_safely(region_folder)
 
-    def initialize_week(
-        self,
-        week_of: datetime.date,
-        gtfs_list: list,
-        root_directory=os.path.join("..", "region"),
-    ):
-        # Create the date folder
-        # Create a gtfs subfolder
-        # Populate the date folder with GTFS data
-        # Generate an initial configuration file
+            # Read in the centroids for the region
+            centroids = gpd.read_file(region["gpkg"], layer="bg_centroids")
 
-        date_folder = os.path.join(root_directory, self.region_key, "date")
+            for network_type in ["full", "adjusted"]:
+                print(f"  Running {network_type} network")
 
-        # Analyses go by "week of" a Monday
+                # Read in the GTFS set
+                gtfs_files = []
+                for filename in os.listdir(region[f"{network_type}_gtfs_folder"]):
+                    gtfs_files.append(
+                        os.path.join(region[f"{network_type}_gtfs_folder"], filename)
+                    )
 
-        if week_of.weekday() != 0:
-            raise NotAMondayError(
-                f"Week of date must be a Monday. Provided date is a {week_of.strftime('%A')}"
-            )
+                # Build the full network
+                network = TransportNetwork(osm_pbf=region["osm"], gtfs=gtfs_files)
 
-        # Set weekday and weekend dates (Wed and Sat typically)
-        weekday = week_of + datetime.timedelta(days=WEEKDAY_DELTA)
-        weekend = week_of + datetime.timedelta(days=WEEKEND_DELTA)
+                # Run the matrices for the specified runs
+                for run_key, run in self.regions[region_key]["runs"].items():
+                    # First make sure an output folder is available
+                    run_folder = os.path.join(region_folder, run_key)
+                    create_folder_safely(run_folder)
 
-        # TODO: Check for holidays, see https://stackoverflow.com/questions/2394235/detecting-a-us-holiday\
+                    print(f"    Running {run_key}")
 
-        # Set up folder structure
-        week_of_folder = os.path.join(date_folder, week_of.strftime("%Y-%m-%d"))
+                    computer = TravelTimeMatrixComputer(
+                        network,
+                        origins=centroids,
+                        destinations=centroids,
+                        departure=run["start_time"],
+                        departure_time_window=datetime.timedelta(
+                            minutes=run["duration"]
+                        ),
+                        max_time=datetime.timedelta(minutes=run["max_time"]),
+                        transport_modes=["WALK", "TRANSIT"],
+                    )
 
-        print(week_of_folder)
-        # Make the subfolder
-        os.mkdir(week_of_folder)
+                    # Actually compute the travel times
+                    mx = computer.compute_travel_times()
 
-        # Make the GTFS folder
-        os.mkdir(os.path.join(week_of_folder, "gtfs"))
+                    # Dump it into a folder
+                    mx.to_parquet(
+                        os.path.join(run_folder, f"{network_type}_matrix.parquet")
+                    )
 
-        # Make the two dates folder
-        os.mkdir(os.path.join(week_of_folder, "weekday_am"))
-        os.mkdir(os.path.join(week_of_folder, "weekday_pm"))
-        os.mkdir(os.path.join(week_of_folder, "weekend"))
 
-        for gtfs in gtfs_list:
-            shutil.copy(gtfs, os.path.join(week_of_folder, "gtfs"))
+def create_folder_safely(folder_path: os.path):
+    """Create a folder if it doesn't exist
+
+    Parameters
+    ----------
+    folder_path : os.path
+        The path to the folder to create or check for existence
+    """
+    if not os.path.exists(folder_path):
+        os.mkdir(folder_path)
 
 
 def create_regions(root_directory):

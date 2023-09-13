@@ -4,18 +4,14 @@ channels:
     - conda-forge
 
 dependencies:
-    - python=3.10
+    - python=3.11
     - geopandas
     - pyyaml
-    - fiona
-    - folium
     - geopandas
-    - importlib_resources
-    - matplotlib
-    - mapclassify
-    - numpy
+    - pyarrow
     - pandas<2.1.0
-    - shapely
+    - r5py>=0.1.1.dev0
     - pip
     - pip:
-      - r5py
+        - gtfs-lite
+        - python-slugify
