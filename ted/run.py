@@ -64,7 +64,7 @@ class Run:
             create_folder_safely(region_folder)
 
             # Read in the centroids for the region
-            centroids = gpd.read_file(region["gpkg"], layer="bg_centroids")
+            centroids = gpd.read_file(region["gpkg"], layer=region["centroids_layer"])
 
             for network_type in ["full", "adjusted"]:
                 print(f"  Running {network_type} network")

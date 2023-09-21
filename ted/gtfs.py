@@ -6,7 +6,9 @@ and validating GTFS feeds."""
 import datetime
 import os
 import urllib
+import zipfile
 
+import geopandas
 import pandas
 from slugify import slugify
 import yaml
@@ -18,6 +20,19 @@ MOBILITY_CATALOG_URL = "https://bit.ly/catalogs-csv"
 def fetch_mobility_database() -> pandas.DataFrame:
     # Get the URL
     return pandas.read_csv(MOBILITY_CATALOG_URL)
+
+
+def remove_routes_from_gtfs(gtfs_path: str, output_folder: str, route_ids: list[str]):
+    # Open/load the GTFS files
+    # Use the "remove_route" feature to remove the set of routes
+    # Make the output folder if it doesn't exist
+    # Write the GTFS file
+    zipfile_name = os.path.basename(gtfs_path)
+    gtfs = GTFS.load_zip(gtfs_path)
+    gtfs.delete_routes(route_ids)
+    if not os.path.exists(output_folder):
+        os.mkdir(output_folder)
+    gtfs.write_zip(os.path.join(output_folder, zipfile_name))
 
 
 def download_gtfs_using_yaml(yaml_path: str, output_folder: str, custom_mdb_path=None):
@@ -77,3 +92,44 @@ def download_gtfs_using_yaml(yaml_path: str, output_folder: str, custom_mdb_path
     
     result_df = pandas.DataFrame(result_data)
     result_df.to_csv(os.path.join(output_folder, "download_results.csv"), index=False)
+
+def get_all_stops(gtfs_folder) -> geopandas.GeoDataFrame:
+    """Get all the stop locations in a given set of GTFS files
+
+    Parameters
+    ----------
+    gtfs_folder : str
+        The folder path for the GTFS folder
+    """
+    stop_dfs = []
+    for filename in os.listdir(gtfs_folder):
+        # Load the zipfile
+        print(filename)
+        try:
+            gtfs = GTFS.load_zip(os.path.join(gtfs_folder, filename))
+            # Get the stops
+            stops = gtfs.stops[["stop_id", "stop_name", "stop_lat", "stop_lon"]].copy()
+            stops["agency"] = filename[:-4]
+            stop_dfs.append(stops)
+        except zipfile.BadZipFile:
+            print(filename, "is not a zipfile, skipping...")
+
+    df = pandas.concat(stop_dfs, axis="index")
+    gdf = geopandas.GeoDataFrame(
+        df, geometry=geopandas.points_from_xy(df.stop_lon, df.stop_lat), crs="EPSG:4326"
+    )
+    return gdf
+
+def summarize_gtfs_data(gtfs_folder, date: datetime.date) -> pandas.DataFrame:
+    summaries = []
+    for filename in os.listdir(gtfs_folder):
+        try:
+            gtfs = GTFS.load_zip(os.path.join(gtfs_folder, filename))
+            summary = gtfs.summary()
+            # summary["service_hours"] = gtfs.service_hours(date)
+            summaries.append(gtfs.summary())
+
+        except zipfile.BadZipFile:
+            print(filename, "is not a valid zipfile, skipping...")
+
+    return pandas.DataFrame(summaries)
