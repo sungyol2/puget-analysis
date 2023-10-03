@@ -7,12 +7,11 @@ dependencies:
     - python=3.11
     - geopandas
     - pyyaml
-    - geopandas
     - pyarrow
     - pandas<2.1.0
     - r5py>=0.1.1.dev0
     - pip
     - pip:
-        - https://github.com/wklumpen/gtfs-lite.git@5c30db06469edca6cb6f106fe718d39fd6c44d8b
+        - git+https://github.com/wklumpen/gtfs-lite.git@5c30db06469edca6cb6f106fe718d39fd6c44d8b
         - python-slugify
         - pygris
