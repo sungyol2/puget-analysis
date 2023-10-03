@@ -5,6 +5,7 @@ import shutil
 import sys
 
 import geopandas as gpd
+import pandas
 from r5py import TravelTimeMatrixComputer, TransportNetwork
 import yaml
 
@@ -72,9 +73,7 @@ class Run:
                 # Read in the GTFS set
                 gtfs_files = []
                 for filename in os.listdir(region[f"{network_type}_gtfs_folder"]):
-                    gtfs_files.append(
-                        os.path.join(region[f"{network_type}_gtfs_folder"], filename)
-                    )
+                    gtfs_files.append(os.path.join(region[f"{network_type}_gtfs_folder"], filename))
 
                 # Build the full network
                 network = TransportNetwork(osm_pbf=region["osm"], gtfs=gtfs_files)
@@ -92,9 +91,7 @@ class Run:
                         origins=centroids,
                         destinations=centroids,
                         departure=run["start_time"],
-                        departure_time_window=datetime.timedelta(
-                            minutes=run["duration"]
-                        ),
+                        departure_time_window=datetime.timedelta(minutes=run["duration"]),
                         max_time=datetime.timedelta(minutes=run["max_time"]),
                         transport_modes=["WALK", "TRANSIT"],
                     )
@@ -103,9 +100,7 @@ class Run:
                     mx = computer.compute_travel_times()
 
                     # Dump it into a folder
-                    mx.to_parquet(
-                        os.path.join(run_folder, f"{network_type}_matrix.parquet")
-                    )
+                    mx.to_parquet(os.path.join(run_folder, f"{network_type}_matrix.parquet"))
 
 
 def create_folder_safely(folder_path: os.path):
@@ -137,3 +132,30 @@ def create_regions(root_directory):
         # Create a subfolder for date-specific analyses
         date_path = os.path.join(region_path, "date")
         os.mkdir(os.path.join(date_path))
+
+
+def create_run_yamls_from_csv(csv_file, run_folder, output_folder, duration=120, max_time=180):
+    runs = pandas.read_csv(csv_file)
+    runs["WEDAM"] = pandas.to_datetime(runs.WEDAM)
+    runs["WEDPM"] = pandas.to_datetime(runs.WEDPM)
+    runs["SATAM"] = pandas.to_datetime(runs.SATAM)
+
+    # Now we go by week
+    for week_of in runs["week_of"].unique():
+        wk_df = runs[runs["week_of"] == week_of].copy()
+        run_id = f"{week_of}"
+        run_dict = dict(
+            {
+                "run_id": run_id,
+                "description": "Main Data Run",
+                "output_folder": output_folder,
+                "week_of": week_of,
+                "regions": {},
+            }
+        )
+        for region in wk_df.region.uinque():
+            run_dict["regions"][region] = {"name": None}
+            rg_df = wk_df[wk_df.region == region].copy()
+            for idx, row in rg_df.iterrows():
+                filename = f"{week_of}.yaml"
+                print(run_id)

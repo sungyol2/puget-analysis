@@ -13,5 +13,6 @@ dependencies:
     - r5py>=0.1.1.dev0
     - pip
     - pip:
-        - gtfs-lite
+        - https://github.com/wklumpen/gtfs-lite.git@5c30db06469edca6cb6f106fe718d39fd6c44d8b
         - python-slugify
+        - pygris
