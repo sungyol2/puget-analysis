@@ -5,8 +5,10 @@ and validating GTFS feeds."""
 
 import datetime
 import difflib
+import json
 import logging
 import os
+import requests
 import urllib
 import zipfile
 
@@ -255,3 +257,93 @@ def transit_service_intensity(gtfs_folder, date: datetime.date) -> pandas.DataFr
             gtfs = GTFS.load_zip(os.path.join(gtfs_folder, filename))
         except zipfile.BadZipFile:
             print(filename, "is not a valid zipfile, skipping...")
+
+
+class TransitLand:
+    BASE_URL = "https://transit.land/api/v2/rest"
+
+    def __init__(self, api_key: str):
+        self._key = api_key
+
+    def make_url(self, *res, **params):
+        url = self.BASE_URL
+        for r in res:
+            url = "{}/{}".format(url, r)
+        if params:
+            params["apikey"] = self._key
+        else:
+            params = {"apikey": self._key}
+        url = "{}?{}".format(url, urllib.parse.urlencode(params))
+
+        return url
+
+    def execute(self, *res, **params):
+        response = requests.get(self.make_url(*res, **params))
+        return response.json()
+
+    def print_url(self, *res, **params):
+        print(self.make_url(*res, **params))
+
+    def feeds(self, onestop_id=None):
+        if onestop_id is None:
+            return self.execute("feeds")
+        else:
+            return self.execute("feeds", onestop_id)
+
+    def feed_versions(self, onestop_id=None):
+        if onestop_id is None:
+            return self.execute("feed_versions")
+        else:
+            return self.execute("feeds", onestop_id, "feed_versions")
+
+    def feed_versions_id_and_dates(self, onestop_id: str) -> pandas.DataFrame:
+        """Return a dataframe containing feed versions and dates for a feed
+
+        Parameters
+        ----------
+        onestop_id : str
+            The Onestop ID for the feed
+
+        Returns
+        -------
+        pandas.DataFrame
+            A dataframe containing IDs and dates for each feed version
+        """
+        feeds = self.execute("feeds", onestop_id, "feed_versions")["feed_versions"]
+        feed_data = {
+            "id": [],
+            "earliest_calendar_date": [],
+            "latest_calendar_date": [],
+        }
+        for f in feeds:
+            feed_data["id"].append(f["id"])
+            feed_data["earliest_calendar_date"].append(f["earliest_calendar_date"])
+            feed_data["latest_calendar_date"].append(f["latest_calendar_date"])
+
+        return pandas.DataFrame(feed_data)
+
+    def search_feeds(self, search_key):
+        self.print_url("feeds", search=search_key)
+
+    def search_agencies(self, search_key):
+        self.print_url("agencies", search=search_key)
+
+    def download_feed_by_id(self, feed_id, output_filename):
+        url = self.make_url("feed_versions", feed_id, "download")
+        urllib.request.urlretrieve(url, output_filename)
+
+    def search_using_gtfs_agency(self, gtfs_file) -> pandas.DataFrame:
+        gtfs = GTFS.load_zip(gtfs_file)
+        agency_name = gtfs.agency.iloc[0].agency_name
+        agency_data = {
+            "id": [],
+            "onestop_id": [],
+            "name": [],
+        }
+        agencies = self.execute("operators", search=agency_name)["agencies"]
+        for a in agencies:
+            agency_data["id"].append(a["id"])
+            agency_data["onestop_id"].append(a["onestop_id"])
+            agency_data["name"].append(a["name"])
+
+        return pandas.DataFrame(agency_data)
