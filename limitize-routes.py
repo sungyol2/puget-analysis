@@ -8,16 +8,31 @@ import os
 
 DEBUG_MODE = False
 
-premium_route_id = pd.read_csv('premium_routes.csv')
-premium_route_id_list = (premium_route_id.iloc[:,0]).tolist()
+premium_route_tag = pd.read_csv('premium_routes.csv')
+premium_route_tag_list = (premium_route_tag.iloc[:,0]).tolist()
 
 #TODO need to figure out how to make premium routes list into ID's
 
-#converts fairfax-connector/295__393
+#converts fairfax-connector/295__393 into 393 (the route ID)
 def route_tag_to_id(tag: str):
+    taglen = len(tag)
+    not_converted = True
+    id = ""
+    
+    while(not_converted):
+        if (tag[taglen - 2] == '_' or taglen < 0): not_converted = False
+        if DEBUG_MODE: print(str(taglen))
+        id = tag[taglen - 1] + id
+        taglen -= 1
 
+    if DEBUG_MODE: print('Converted: ' + tag +' into: ' + id)
     return id
 
+premium_route_id_list = []
+
+for x in premium_route_tag_list:
+    if DEBUG_MODE: print('length of id list: ' + str(len(premium_route_tag_list)))
+    premium_route_id_list.append(route_tag_to_id(x))
 
 #specifies the entry and output folders
 entry_path = '../region/WAS/gtfs'
