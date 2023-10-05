@@ -21,7 +21,6 @@ def route_tag_to_id(tag: str):
     
     while(not_converted):
         if (tag[taglen - 2] == '_' or taglen < 0): not_converted = False
-        if DEBUG_MODE: print(str(taglen))
         id = tag[taglen - 1] + id
         taglen -= 1
 
