@@ -6,7 +6,6 @@ and validating GTFS feeds."""
 import datetime
 import difflib
 import json
-import logging
 import os
 import requests
 import urllib
@@ -20,8 +19,6 @@ import yaml
 from gtfslite.gtfs import GTFS
 
 MOBILITY_CATALOG_URL = "https://bit.ly/catalogs-csv"
-
-logging.basicConfig(format="%(levelname)s: %(message)s", level=logging.DEBUG)
 
 
 def download_gtfs_using_yaml(yaml_path: str, output_folder: str, custom_mdb_path=None):
