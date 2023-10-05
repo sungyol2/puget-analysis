@@ -160,25 +160,3 @@ def create_run_yamls_from_csv(csv_file, run_folder, output_folder, duration=120,
             for idx, row in rg_df.iterrows():
                 filename = f"{week_of}.yaml"
                 print(run_id)
-
-
-def link_block_group_shapes(block_groups_2020: gpd.GeoDataFrame, census_year: int):
-    block_groups_2020["state"] = block_groups_2020["bg_id"].str[:2]
-    # pull the block groups for that state
-    dfs = []
-    for state in block_groups_2020.state.unique():
-        print(state)
-        # Fetch that state
-        pybg = block_groups(state=str(state), year=census_year, cb=False)
-        pybg.to_crs(block_groups_2020.crs, inplace=True)
-        pybg["area"] = pybg.geometry.area
-        dfs.append(pybg)
-
-    all_bg = pandas.concat(dfs, axis="index")
-    joined = all_bg.intersects(block_groups_2020)
-    # joined = gpd.sjoin(all_bg, block_groups_2020)[["bg_id", "GEOID", "area", "geometry"]]
-    joined.to_file("test_join.gpkg")
-    joined.rename(columns={"GEOID": f"bg_id_{census_year}"}, inplace=True)
-    joined["frac_in_2020"] = joined["area"] / joined.geometry.area
-
-    return joined
