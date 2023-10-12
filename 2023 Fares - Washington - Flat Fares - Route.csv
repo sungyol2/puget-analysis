@@ -1,0 +1,84 @@
+mdb_slug,route_long_name,route_id,fare_cost
+district-of-columbia-washington-metropolitan-area-transit-authority-wmata-bus-1846,MT VERNON EXPRESS,11Y,425
+district-of-columbia-washington-metropolitan-area-transit-authority-wmata-bus-1846,KINGS PARK EXPRESS,17G,425
+district-of-columbia-washington-metropolitan-area-transit-authority-wmata-bus-1846,KINGS PARK EXPRESS,17K,425
+district-of-columbia-washington-metropolitan-area-transit-authority-wmata-bus-1846,RICHMOND HIGHWAY EXPRESS,REX,425
+district-of-columbia-washington-metropolitan-area-transit-authority-wmata-bus-1846,LAUREL-BURTONSVILLE EXPRESS,Z7,425
+district-of-columbia-washington-metropolitan-area-transit-authority-wmata-bus-1846,14TH STREET LIMITED,59,425
+district-of-columbia-washington-metropolitan-area-transit-authority-wmata-bus-1846,NEW HAMPSHIRE AVE-MD LIMITED LN,K9,425
+district-of-columbia-washington-metropolitan-area-transit-authority-wmata-bus-1846,BENNING ROAD-H STREET LIMITED,X9,425
+district-of-columbia-washington-metropolitan-area-transit-authority-wmata-bus-1846,GEORGIA AVENUE METROEXTRA,79,425
+district-of-columbia-washington-metropolitan-area-transit-authority-wmata-bus-1846,16TH STREET METROEXTRA,S9,425
+virginia-fairfax-connector-483,Saratoga-Pentagon-Mark Center,393,425
+virginia-fairfax-connector-483,Saratoga - Pentagon Express,394,425
+virginia-fairfax-connector-483,Gambrill - Pentagon Express,395,425
+virginia-fairfax-connector-483,Backlick-Pentagon Express,396,425
+virginia-fairfax-connector-483,Stringfellow Rd - D St SW DC,697,425
+virginia-fairfax-connector-483,Vienna Metro - Pentagon,698,425
+virginia-fairfax-connector-483,Government Center - Downtown D.C.,699,425
+virginia-fairfax-connector-483,Braeburn Dr - Pentagon,835,425
+virginia-fairfax-connector-483,TAGS Springfield Circulator,350,50
+virginia-fairfax-connector-483,Park Run - Westpark,423,50
+virginia-fairfax-connector-483,Jones Branch Drive,424,50
+virginia-fairfax-connector-483,Reston North- Pentagon Express,599,750
+virginia-potomac-and-rappahannock-transportation-commission-prtc-omniride-1156,543 - Stafford to L'Enfant Plaza,4222,450
+virginia-potomac-and-rappahannock-transportation-commission-prtc-omniride-1156,Manassas Washington DC Express,4224,225
+virginia-potomac-and-rappahannock-transportation-commission-prtc-omniride-1156,Manassas Pentagon Express,4225,225
+virginia-potomac-and-rappahannock-transportation-commission-prtc-omniride-1156,Manassas to Dulles/Reston/Herndon,4226,225
+virginia-potomac-and-rappahannock-transportation-commission-prtc-omniride-1156,Gainesville Pentagon Express,4227,225
+virginia-potomac-and-rappahannock-transportation-commission-prtc-omniride-1156,Haymarket to Rosslyn/Ballston,4228,225
+virginia-potomac-and-rappahannock-transportation-commission-prtc-omniride-1156,Stafford Pentagon,4232,450
+virginia-potomac-and-rappahannock-transportation-commission-prtc-omniride-1156,Dale City Washington DC Express,4234,450
+virginia-potomac-and-rappahannock-transportation-commission-prtc-omniride-1156,Dale City Pentagon Rosslyn Express,4248,450
+virginia-potomac-and-rappahannock-transportation-commission-prtc-omniride-1156,Dale City Navy Yard Express,4236,450
+virginia-potomac-and-rappahannock-transportation-commission-prtc-omniride-1156,Lake Ridge Washington Express,4241,450
+virginia-potomac-and-rappahannock-transportation-commission-prtc-omniride-1156,Montclair Washington DC Express,4243,450
+virginia-potomac-and-rappahannock-transportation-commission-prtc-omniride-1156,Montclair Pentagon Express,4244,450
+virginia-loudoun-county-transit-1053,DC All Stops Via East Gate,281,1000
+virginia-loudoun-county-transit-1053,Crystal City Via Rosslyn/Pentagon,282,1000
+virginia-loudoun-county-transit-1053,Pentagon,284,1000
+virginia-loudoun-county-transit-1053,DC ALL STOPS,481,1000
+virginia-loudoun-county-transit-1053,CRYSTAL CITY VIA ROSSLYN AND PENTAGON,482,1000
+virginia-loudoun-county-transit-1053,DC ALL STOPS,483,1000
+virginia-loudoun-county-transit-1053,East Gate Via Stone Ridge,681,1000
+virginia-loudoun-county-transit-1053,EAST GATE VIA DULLES SOUTH,682,1000
+virginia-loudoun-county-transit-1053,East Gate via Stone Ridge,684,1000
+virginia-loudoun-county-transit-1053,Leesburg via DTC P&R,881,1000
+virginia-loudoun-county-transit-1053,Leesburg via DTC P&R,882,1000
+virginia-loudoun-county-transit-1053,Purcellville via Harmony,883,1000
+maryland-maryland-transit-administration-commuter-bus-467,GAITHERSBURG - BWI BUSINESS DIST,11694,
+maryland-maryland-transit-administration-commuter-bus-467,COLUMBIA - BETHESDA,11695,
+maryland-maryland-transit-administration-commuter-bus-467,FREDERICK - COLLEGE PARK,11696,
+maryland-maryland-transit-administration-commuter-bus-467,KENT ISLAND - ANNAPOLIS/BALTIMORE,11697,
+maryland-maryland-transit-administration-commuter-bus-467,BALTIMORE - ANNAPOLIS,11698,
+maryland-maryland-transit-administration-commuter-bus-467,ANNAPOLIS - WASHINGTON DC,11699,
+maryland-maryland-transit-administration-commuter-bus-467,SEVERNA PARK & ANNAPOLIS - DC,11700,
+maryland-maryland-transit-administration-commuter-bus-467,KENT ISLAND - WASHINGTON DC,11701,
+maryland-maryland-transit-administration-commuter-bus-467,KENT ISLAND & DAVIDSONVILLE - DC,11702,
+maryland-maryland-transit-administration-commuter-bus-467,SEVERNA PARK & DAVIDSONVILLE - DC,11703,
+maryland-maryland-transit-administration-commuter-bus-467,COLUMBIA & SILVER SPRING - DC,11707,
+maryland-maryland-transit-administration-commuter-bus-467,COLUMBIA - BALTIMORE,11708,
+maryland-maryland-transit-administration-commuter-bus-467,COLUMBIA & SILVER SPRING - DC,11709,
+maryland-maryland-transit-administration-commuter-bus-467,LAUREL - BALTIMORE,11710,
+maryland-maryland-transit-administration-commuter-bus-467,COLUMBIA & SILVER SPRING - DC,11711,
+maryland-maryland-transit-administration-commuter-bus-467,CLARKSVILLE & COLUMBIA - DC,11712,
+maryland-maryland-transit-administration-commuter-bus-467,ELLICOTT CITY & COLUMBIA - DC,11713,
+maryland-maryland-transit-administration-commuter-bus-467,CHURCHVILLE - BALTIMORE,11714,
+maryland-maryland-transit-administration-commuter-bus-467,HICKORY - HOPKINS HOSPITAL,11715,
+maryland-maryland-transit-administration-commuter-bus-467,HAVRE DE GRACE - HOPKINS,11716,
+maryland-maryland-transit-administration-commuter-bus-467,HAGERSTOWN-SHADY GROVE/ROCK SPRING,11717,
+maryland-maryland-transit-administration-commuter-bus-467,FREDERICK - SHADY GROVE/ROCK SPRING,11718,
+maryland-maryland-transit-administration-commuter-bus-467,WALDORF - WASHINGTON DC,11719,
+maryland-maryland-transit-administration-commuter-bus-467,WALDORF - WASHINGTON DC,11720,
+maryland-maryland-transit-administration-commuter-bus-467,LA PLATA/WALDORF - WASHINGTON DC,11721,
+maryland-maryland-transit-administration-commuter-bus-467,WALDORF & ACCOKEEK - WASHINGTON DC,11722,
+maryland-maryland-transit-administration-commuter-bus-467,LA PLATA - WALDORF & ACCOKEEK - DC,11723,
+maryland-maryland-transit-administration-commuter-bus-467,CHARLOTTE HALL/WALDORF -  DC,11724,
+maryland-maryland-transit-administration-commuter-bus-467,CHARLOTTE HALL/WALDORF - DC,11725,
+maryland-maryland-transit-administration-commuter-bus-467,CALIFORNIA/CHARLOTTE HALL - DC,11726,
+maryland-maryland-transit-administration-commuter-bus-467,CHARLOTTE HALL/WALDORF - DC,11727,
+maryland-maryland-transit-administration-commuter-bus-467,PINDELL - WASHINGTON DC,11728,
+maryland-maryland-transit-administration-commuter-bus-467,NORTH BEACH/PG EQUESTRIAN CTR - DC,11729,
+maryland-maryland-transit-administration-commuter-bus-467,SUNDERLAND / DUNKIRK - DC,11730,
+maryland-maryland-transit-administration-commuter-bus-467,ST LEONARD / PRINCE FREDERICK - DC,11731,
+maryland-maryland-transit-administration-commuter-bus-467,PR FREDERICK/DUNKIRK - SUITLAND/DC,11732,

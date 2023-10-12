@@ -6,7 +6,7 @@ import numpy as np
 import datetime as dt
 import os
 
-DEBUG_MODE = False
+DEBUG_MODE = True
 
 premium_route_tag = pd.read_csv('premium_routes.csv')
 premium_route_tag_list = (premium_route_tag.iloc[:,0]).tolist()
