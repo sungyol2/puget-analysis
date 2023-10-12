@@ -2,19 +2,19 @@ from gtfslite.gtfs import GTFS
 from ted.gtfs import remove_routes_from_gtfs
 import pandas as pd
 import zipfile
-import numpy as np
 import datetime as dt
 import os
 
-DEBUG_MODE = True
+DEBUG_MODE = False
 
 premium_route_tag = pd.read_csv('premium_routes.csv')
 premium_route_tag_list = (premium_route_tag.iloc[:,0]).tolist()
 
-#TODO need to figure out how to make premium routes list into ID's
 
-#converts fairfax-connector/295__393 into 393 (the route ID)
 def route_tag_to_id(tag: str):
+    #Makes premium routes list into ID's
+    #e.g. converts fairfax-connector/295__393 into 393 (the route ID)
+
     taglen = len(tag)
     not_converted = True
     id = ""
@@ -30,7 +30,6 @@ def route_tag_to_id(tag: str):
 premium_route_id_list = []
 
 for x in premium_route_tag_list:
-    if DEBUG_MODE: print('length of id list: ' + str(len(premium_route_tag_list)))
     premium_route_id_list.append(route_tag_to_id(x))
 
 #specifies the entry and output folders
@@ -74,7 +73,3 @@ while index1 < len(dated_entries):
 
 if DEBUG_MODE: print('done!')
 
-
-#1. Open the zipfile using the most recent version of GTFS-Lite
-#2. Using the routes identified, use delete_routes() on the package and save as a modified file with a -LIMITED tag
-#3. Upload the resulting limited GTFS files to the GDrive
