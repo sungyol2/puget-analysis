@@ -127,6 +127,63 @@ def remove_routes_from_gtfs(gtfs_path: str, output_folder: str, route_ids: list[
         os.mkdir(output_folder)
     gtfs.write_zip(os.path.join(output_folder, zipfile_name))
 
+# def remove_premeium_routes_from_gtfs(gtfs_path: str, output_path: str, premium_routes_path: str):
+#     """Make a copy of a GTFS folder without premium routes
+
+#     Parameters
+#     ----------
+#     gtfs_path : str
+#         The path to the folder to remove premium routes from.
+#     output_path : str
+#         The path to where the new GTFS folder without premium routes will be created.
+#     premium_routes_path : str
+#         The path to the csv containing the list of premium route slugs and their ids.
+#         This must specify a csv file and the csv should be formatted into 'route_slug, route_id' columns
+
+#     """
+#     premium_routes = pandas.read_csv(premium_routes_path, index_col = False)
+#     os.mkdir(output_path)
+#     dated_entries = os.listdir(gtfs_path)
+
+#     # Iterate through all dated entries
+#     for curr_dated_entry in dated_entries:
+#         # Make target output folder with the '-limited' tag
+#         dated_output_path = os.path.join(output_path, curr_dated_entry + '-limited')
+#         os.mkdir(dated_output_path)
+#         zip_entries = os.listdir(os.path.join(gtfs_path, curr_dated_entry))
+#         # Iterate through .zip entries
+#         for curr_zip_entry in zip_entries:
+#             # Find entry zip folder
+#             curr_zip_dir = os.path.join(gtfs_path, curr_dated_entry, curr_zip_entry)
+#             curr_zip_slug = curr_zip_entry.removesuffix('.zip')
+            
+#             if not(curr_zip_entry.startswith('._')):
+#                     print("Currently parsing: " + curr_dated_entry + ": " + curr_zip_entry)
+        
+#             premium_slug_rows = premium_routes.loc[premium_routes['route_slug'] == curr_zip_slug]
+#             slug_premium_ids = (premium_slug_rows.iloc[:,1]).tolist()
+
+#             #Skip slug labelled __ALL__
+#             if '__ALL__' in slug_premium_ids:
+#                 print(curr_zip_slug + " is a premium route, skipping...")
+#             #delete specific routes within the given slug
+#             else:
+#                 try: 
+#                     if (curr_zip_slug in premium_routes['route_slug'].values): #delete premium routes if it exists
+#                         remove_routes_from_gtfs(curr_zip_dir,dated_output_path,slug_premium_ids)
+#                     else: #not a feed containing premium routes: copy over current feed as is
+#                         copy = GTFS.load_zip(curr_zip_dir)
+#                         if not os.path.exists(dated_output_path):
+#                             os.mkdir(dated_output_path)
+#                         copy.write_zip(os.path.join(dated_output_path,curr_zip_entry))
+#                 except zipfile.BadZipFile:
+#                     print(curr_zip_entry, "is not a zipfile, skipping...")
+
+#             if not(curr_zip_entry.startswith('._')):
+#                 print("Finished parsing: " + curr_zip_entry)
+#         print("\n       ---Finished parsing feed: " + curr_dated_entry + "---\n")
+#     print("Done removing premium routes from specified GTFS folder!")
+
 
 def stops_in_block_groups(
     gtfs_folder, block_groups: geopandas.GeoDataFrame, date: datetime.date, buffer=400
