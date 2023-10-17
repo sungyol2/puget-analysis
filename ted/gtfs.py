@@ -97,9 +97,10 @@ def get_all_stops(gtfs_folder) -> geopandas.GeoDataFrame:
         The folder path for the GTFS folder
     """
     stop_dfs = []
+    print("Fetching all stops")
     for filename in os.listdir(gtfs_folder):
         # Load the zipfile
-        print(filename)
+        print(" ", filename)
         try:
             gtfs = GTFS.load_zip(os.path.join(gtfs_folder, filename))
             # Get the stops
@@ -248,10 +249,14 @@ def match_with_mobility_database(gtfs_folder, custom_mdb_path=None):
             print(filename, "is not a valid zipfile, skipping...")
 
 
-def transit_service_intensity(gtfs_folder, date: datetime.date) -> pandas.DataFrame:
+def compute_transit_service_intensity(gtfs_folder, date: datetime.date) -> pandas.DataFrame:
     for filename in os.listdir(gtfs_folder):
         try:
             gtfs = GTFS.load_zip(os.path.join(gtfs_folder, filename))
+            # Let's now load the block goups
+            # Get a set of stops we need to "batch"
+            # Get unique trips for each stop
+            # Somehow handle frequency-level information
         except zipfile.BadZipFile:
             print(filename, "is not a valid zipfile, skipping...")
 
