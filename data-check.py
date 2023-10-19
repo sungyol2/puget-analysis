@@ -1,5 +1,6 @@
 from gtfslite.gtfs import GTFS
 from ted.gtfs import get_all_stops, summarize_gtfs_data
+from datetime import date
 import pandas as pd
 import numpy as np
 import zipfile
@@ -18,9 +19,9 @@ agency_stops_masterlist = {
 
 feed_check_list = pd.read_csv(agencies_file)
 
-for date in os.listdir(gtfs_folder):
-    print(f"\nNow parsing {date}...\n")
-    date_file = os.path.join(gtfs_folder,date)
+for date_entry in os.listdir(gtfs_folder):
+    print(f"\nNow parsing {date_entry}...\n")
+    date_file = os.path.join(gtfs_folder,date_entry)
     stops = get_all_stops(date_file)
 
     #get a list of the unique stops in dated feed
@@ -42,22 +43,17 @@ for date in os.listdir(gtfs_folder):
     total_invalid_feeds = len(invalid_feed_id_list)
 
     #add data to masterlist
-    agency_stops_masterlist['date'].append(date)
+    agency_stops_masterlist['date'].append(date_entry)
     agency_stops_masterlist['total_stops'].append(total_stops)
     agency_stops_masterlist['total_unique_stops'].append(total_unique_stops)
     agency_stops_masterlist['total_invalid_feeds'].append(total_invalid_feeds)
 
-    print(f"\nDone parsing, {date} has...\nTotal stops: {total_stops}\nTotal unique stops: {total_unique_stops}\nTotal invalid feeds: {total_invalid_feeds}")
+    #TODO: Figure out how to get this working vvv
+    #print(f"Date summary:\n{GTFS.routes_summary(date=date.fromisoformat(date_entry))}")
+    print(f"\nDone parsing, {date_entry} has...\nTotal stops: {total_stops}\nTotal unique stops: {total_unique_stops}\nTotal invalid feeds: {total_invalid_feeds}")
 
 masterlist_df = pd.DataFrame(agency_stops_masterlist)
 print(f"\nMaster List:\n{masterlist_df}")
 
-#Pseudo:
-#go into dated ntry and look through all feed 
-# use get_all_stops to get all the stops
-# look into what summarize gtfs data does using summarize_gtfs_data(gtfs)
-# - add total # of stops per each agency
-# - add total # of routes
-# - List all unique route_type in routes.txt
-# - make reccomendations?? or flag feeds that dont have all data
+
 
