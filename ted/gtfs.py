@@ -91,9 +91,12 @@ def fetch_mobility_database() -> pandas.DataFrame:
 def check_routes_in_gtfs(gtfs_folder: str):
     """Get a summary of total stops, total unique stops, and total invalid feeds for each dated entry
 
-    Args:
-        gtfs_folder (str): path to the gtfs folder for a set of regional data
+    Parameters
+    ----------
+    gtfs_folder : str 
+        Path to the gtfs folder for a set of regional data
     """
+    
     agency_stops_masterlist = {
     "date": [],
     "total_stops": [],
