@@ -88,6 +88,69 @@ def fetch_mobility_database() -> pandas.DataFrame:
     return pandas.read_csv(MOBILITY_CATALOG_URL)
 
 
+def check_routes_in_gtfs(gtfs_folder: str):
+    """Get a summary of total stops, total unique stops, and total invalid feeds for each dated entry
+
+    Args:
+        gtfs_folder (str): path to the gtfs folder for a set of regional data
+    """
+    agency_stops_masterlist = {
+    "date": [],
+    "total_stops": [],
+    "total_unique_stops": [],
+    "total_invalid_feeds": [],
+    }
+
+    for date_entry in os.listdir(gtfs_folder):
+    
+        print(f"\nNow parsing {date_entry}...\n")
+        date_file = os.path.join(gtfs_folder,date_entry)
+
+        #get a list of the unique stops in dated feed
+        stops = get_all_stops(date_file)
+        stop_id_list = (stops.loc[:,'stop_id'])
+        unique_stop_id_list = pd.unique(stop_id_list)
+        invalid_feed_id_list = []
+        stop_id_list = stop_id_list.tolist()
+        unique_stop_id_list = pd.unique(unique_stop_id_list)
+
+        agencies = os.listdir(date_file)
+        #make a list with invalid agencies
+        for agency in agencies:
+            if agency.startswith('._') and (agency.endswith('.zip') or agency.endswith('.csv')):
+                invalid_feed_id_list.append(agency)
+        
+        #get total amount of stops and unique stops
+        total_stops = len(stop_id_list)
+        total_unique_stops = len(unique_stop_id_list)
+        total_invalid_feeds = len(invalid_feed_id_list)
+
+        #add data to masterlist
+        agency_stops_masterlist['date'].append(date_entry)
+        agency_stops_masterlist['total_stops'].append(total_stops)
+        agency_stops_masterlist['total_unique_stops'].append(total_unique_stops)
+        agency_stops_masterlist['total_invalid_feeds'].append(total_invalid_feeds)
+
+        #TODO: Figure out how to get this working vvv
+        #print(f"Date summary:\n{GTFS.routes_summary(date=date.fromisoformat(date_entry))}")
+        print(f"\nDone parsing, {date_entry} has...\nTotal stops: {total_stops}\nTotal unique stops: {total_unique_stops}\nTotal invalid feeds: {total_invalid_feeds}")
+
+    masterlist_df = pd.DataFrame(agency_stops_masterlist)
+    print(f"\nMaster List:\n{masterlist_df}")
+
+def remove_routes_from_gtfs(gtfs_path: str, output_folder: str, route_ids: list[str]):
+    # Open/load the GTFS files
+    # Use the "remove_route" feature to remove the set of routes
+    # Make the output folder if it doesn't exist
+    # Write the GTFS file
+    zipfile_name = os.path.basename(gtfs_path)
+    gtfs = GTFS.load_zip(gtfs_path)
+    gtfs.delete_routes(route_ids)
+    if not os.path.exists(output_folder):
+        os.mkdir(output_folder)
+    gtfs.write_zip(os.path.join(output_folder, zipfile_name))
+
+
 def get_all_stops(gtfs_folder) -> geopandas.GeoDataFrame:
     """Get all the stop locations in a given set of GTFS files
 
