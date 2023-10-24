@@ -1,6 +1,34 @@
 import geopandas
 import pandas
 from pygris import block_groups
+from pygris.data import get_census
+
+demographic_categories = {
+    "B03002_001E": "Everyone",
+    "B03002_003E": "White People",
+    "B03002_004E": "Black People",
+    "B03002_006E": "Asian",
+    "B03002_012E": "Hispanic or Latino",
+    "C17002_003E": "In Poverty",
+}
+
+total_hhld = "B11001_001E"
+zero_car_hhld = "B08201_002E"
+
+age_categories = [
+    "B01001_020E",
+    "B01001_021E",
+    "B01001_022E",
+    "B01001_023E",
+    "B01001_024E",
+    "B01001_025E",
+    "B01001_044E",
+    "B01001_045E",
+    "B01001_046E",
+    "B01001_047E",
+    "B01001_048E",
+    "B01001_049E",
+]
 
 
 def get_state_block_groups_by_year(states: list, year: int) -> geopandas.GeoDataFrame:
@@ -74,6 +102,114 @@ def get_jobs_by_year(
     merged = pandas.merge(block_groups, all, left_on="BG20", right_on="bgrp", how="left").fillna(0)[["BG20", "C000"]]
     merged["C000"] = merged["C000"].astype(int)
     return merged
+
+
+def fetch_demographic_data(block_groups: pandas.DataFrame) -> pandas.DataFrame:
+    """Fetch demographic data based on provided study area
+
+    Returns
+    -------
+    DataFrame
+        A pandas dataframe containing the demographic data for the impact area.
+    """
+    # See: https://api.census.gov/data/2021/acs/acs5
+    # Read in the analysis centroids
+    # api_key = self.settings["api_key"]
+    print("Downloading demographic data")
+    block_groups["state"] = block_groups["bg_id"].str[:2]
+    block_groups["county"] = block_groups["bg_id"].str[2:5]
+    states_and_counties = block_groups[["state", "county"]].drop_duplicates().sort_values("state")
+    all_data = []
+    # First we fetch all the easy ones
+    variables = [i for i in demographic_categories.keys()]
+    for idx, area in states_and_counties.iterrows():
+        print(f"  Fetching State: {area['state']} County: {area['county']}")
+        data = get_census(
+            dataset="acs/acs5",
+            year="2021",
+            variables=variables,
+            params={
+                "for": "block group:*",
+                "in": f"state:{area['state']} county:{area['county']}",
+            },
+            return_geoid=True,
+        )
+
+        # Age data
+        age_data = get_census(
+            dataset="acs/acs5",
+            year="2021",
+            variables=age_categories,
+            params={
+                "for": "block group:*",
+                "in": f"state:{area['state']} county:{area['county']}",
+            },
+            return_geoid=True,
+        )
+
+        # Make sure they're numbers or summing goes very badly
+        age_data[age_categories] = age_data[age_categories].astype(int)
+        age_data["age_65p"] = age_data[age_categories].sum(axis="columns")
+
+        data = pandas.merge(data, age_data[["age_65p", "GEOID"]], on="GEOID")
+
+        all_hhld = get_census(
+            dataset="acs/acs5",
+            year="2021",
+            variables=[total_hhld],
+            params={
+                "for": "block group:*",
+                "in": f"state:{area['state']} county:{area['county']}",
+            },
+            return_geoid=True,
+        )
+        all_hhld["tract_id"] = all_hhld["GEOID"].str[:-1]
+        all_hhld[total_hhld] = all_hhld[total_hhld].astype(int)
+        all_hhld_gb = all_hhld[["tract_id", total_hhld]].groupby("tract_id", as_index=False).sum()
+        all_hhld = pandas.merge(all_hhld, all_hhld_gb, how="left", on="tract_id")
+        # Create a proportion table for assignment
+        all_hhld.columns = ["bg_hhld", "bg_id", "tract_id", "tract_hhld"]
+        all_hhld["proportion"] = all_hhld["bg_hhld"] / all_hhld["tract_hhld"]
+        all_hhld = all_hhld[["bg_id", "tract_id", "proportion"]]
+
+        # Zero-car HHLD data
+        zc_hhld = get_census(
+            dataset="acs/acs5",
+            year="2021",
+            variables=[zero_car_hhld],
+            params={
+                "for": "tract:*",
+                "in": f"state:{area['state']} county:{area['county']}",
+            },
+            return_geoid=True,
+        )
+
+        zc_hhld[zero_car_hhld] = zc_hhld[zero_car_hhld].astype(int)
+        zc_all = pandas.merge(all_hhld, zc_hhld, how="left", left_on="tract_id", right_on="GEOID")
+        zc_all["zero_car_hhld"] = zc_all[zero_car_hhld] * zc_all["proportion"]
+        zc_all["zero_car_hhld"] = zc_all["zero_car_hhld"].fillna(0).round().astype(int)
+
+        # Rename columns back to match the pattern above
+        zc_all = zc_all[["bg_id", "zero_car_hhld"]]
+        zc_all = zc_all.rename(columns={"bg_id": "GEOID"})
+
+        data = pandas.merge(data, zc_all[["GEOID", "zero_car_hhld"]], on="GEOID")
+
+        all_data.append(data)
+
+    result = pandas.concat(all_data, axis="index")
+
+    # Now let's do the age one
+
+    # Rename our GEOID
+    result = result.rename(columns={"GEOID": "bg_id"})
+    result = result[result["bg_id"].isin(block_groups["bg_id"])]
+    # Move the bg_id column to the front
+    bg_column = result.pop("bg_id")
+    result.insert(0, "bg_id", bg_column)
+    # result.to_csv(os.path.join(self.cache_folder, DEMOGRAPHICS_FILENAME), index=False)
+    print("  Finished downloading demographic data")
+    return result
 
 
 def link_block_group_shapes(block_groups_2020: geopandas.GeoDataFrame, census_year: int):

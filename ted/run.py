@@ -11,6 +11,7 @@ from r5py import TravelTimeMatrixComputer, TransportNetwork
 import yaml
 
 from gtfslite import GTFS
+import traccess
 
 from .exception import NotAMondayError
 from .gtfs import get_all_stops
@@ -22,7 +23,7 @@ WEEKDAY_DELTA = 2
 #: The name of the block group column
 BGNAME = "BG20"
 #: The tag we use for limited sets
-LIMITED_TAG = "-limited"
+LIMITED_TAG = "limited"
 #: Size of the Transit Service Intensity buffer to use (meters)
 TSI_BUFFER_SIZE = 200
 
@@ -76,17 +77,19 @@ class Run:
 
             if region["full_matrix"]:
                 # Read in the centroids for the region
-                centroids = gpd.read_file(region["gpkg"], layer=region["centroids_layer"])
-                centroids.rename(columns={BGNAME, "id"})
+                centroids = gpd.read_file(region_config["gpkg"], layer=region_config["centroids_layer"])
+                centroids.rename(columns={BGNAME: "id"}, inplace=True)
                 print(f"  Running full network")
-                gtfs_folder = os.path.join(region_config["gtfs"], self.week_of)
+                gtfs_folder = os.path.join(region_config["gtfs"], "full", self.week_of)
                 self.run_matrix(region_config, centroids, gtfs_folder, region_folder, region["runs"], "full_matrix")
             if region["limited_matrix"]:
-                centroids = gpd.read_file(region["gpkg"], layer=region["centroids_layer"])
-                centroids.rename(columns={BGNAME, "id"})
-                print(f"  Running full network")
-                gtfs_folder = os.path.join(region_config["gtfs"], f"self.week_of-{LIMITED_TAG}")
-                self.run_matrix(region_config, centroids, gtfs_folder, region_folder, region["runs"], "limited_matrix")
+                centroids = gpd.read_file(region_config["gpkg"], layer=region_config["centroids_layer"])
+                centroids.rename(columns={BGNAME: "id"}, inplace=True)
+                print(f"  Running limited network")
+                gtfs_folder = os.path.join(region_config["gtfs"], LIMITED_TAG, f"{self.week_of}-{LIMITED_TAG}")
+                self.run_matrix(
+                    region_config, centroids, gtfs_folder, region_folder, region["runs"], f"{LIMITED_TAG}_matrix"
+                )
             if region["tsi"]:
                 # Need to get the shapes
                 areas = gpd.read_file(region_config["gpkg"], layer=region_config["areas_layer"])
@@ -125,13 +128,80 @@ class Run:
 
                     df = pandas.DataFrame(results)
                     df.to_csv(os.path.join(run_folder, "tsi.csv"), index=False)
+            if region["access"]:
+                print("Computing access metrics")
+                # Compute access metrics
+                supply = traccess.Supply.from_csv(region_config["supply"], dtype={"BG20": str}, id_column="BG20")
+                for run_key, run in region["runs"].items():
+                    run_folder = os.path.join(region_folder, run_key)
+                    # Let's do full matrix first
+                    full_cost = traccess.Cost.from_parquet(
+                        os.path.join(run_folder, "full_matrix.parquet"),
+                        from_id="from_id",
+                        to_id="to_id",
+                    )
+                    # Now let's compute some STUFF
+                    ac = traccess.AccessComputer(supply, full_cost)
+                    print(f"    {run_key}: Computing c15 measures")
+                    c15 = ac.cumulative_cutoff(
+                        cost_columns=["travel_time"], cutoffs=[15], supply_columns=["acres"]
+                    ).data
+                    c15.columns = ["acres_c15"]
 
-    def run_matrix(region, centroids, gtfs_folder, region_folder, runs, output_name):
+                    print(f"    {run_key}: Computing c30 measures")
+                    c30 = ac.cumulative_cutoff(
+                        cost_columns=["travel_time"], cutoffs=[30], supply_columns=["C000", "acres"]
+                    ).data
+                    c30.columns = ["C000_c30", "acres_c30"]
+
+                    print(f"    {run_key}: Computing c45 measures")
+                    c45 = ac.cumulative_cutoff(
+                        cost_columns=["travel_time"], cutoffs=[45], supply_columns=["C000"]
+                    ).data
+                    c45.columns = ["C000_c45"]
+
+                    print(f"    {run_key}: Computing c60 measures")
+                    c60 = ac.cumulative_cutoff(
+                        cost_columns=["travel_time"], cutoffs=[60], supply_columns=["C000"]
+                    ).data
+                    c60.columns = ["C000_c60"]
+
+                    print(f"    {run_key}: Computing t1 measures")
+                    t1 = ac.cost_to_closest(
+                        "travel_time",
+                        ["education", "grocery", "hospitals", "pharmacies", "urgent_care_facilities"],
+                        n=1,
+                    ).data
+                    t1.columns = {f"{c}_t1" for c in t1.columns}
+
+                    print(f"    {run_key}: Computing t3 measures")
+                    t3 = ac.cost_to_closest(
+                        "travel_time",
+                        ["education", "grocery", "hospitals", "pharmacies", "urgent_care_facilities"],
+                        n=3,
+                    ).data
+                    t3.columns = {f"{c}_t3" for c in t3.columns}
+
+                    df = c15.join(c30)
+                    df = df.join(c45)
+                    df = df.join(c60)
+                    df = df.join(t1)
+                    df = df.join(t3)
+                    df = df.reset_index().rename(columns={"from_id": "BG20"})
+                    df.to_csv(os.path.join(run_folder, "access.csv"), index=False)
+
+            if region["equity"]:
+                # Compute equity summaries
+                pass
+
+    def run_matrix(self, region, centroids, gtfs_folder, region_folder, runs, output_name):
         gtfs_files = []
         for filename in os.listdir(gtfs_folder):
-            gtfs_files.append(os.path.join(gtfs_folder, filename))
+            if (not filename.startswith(".")) and (filename.endswith(".zip")):
+                gtfs_files.append(os.path.join(gtfs_folder, filename))
 
         # Build the full network
+        print("   building transport network")
         network = TransportNetwork(osm_pbf=region["osm"], gtfs=gtfs_files)
 
         # Run the matrices for the specified runs
@@ -146,9 +216,9 @@ class Run:
                 network,
                 origins=centroids,
                 destinations=centroids,
-                departure=run["start_time"],
-                departure_time_window=datetime.timedelta(minutes=run["duration"]),
-                max_time=datetime.timedelta(minutes=run["max_time"]),
+                departure=run,
+                departure_time_window=datetime.timedelta(minutes=120),
+                max_time=datetime.timedelta(minutes=180),
                 transport_modes=["WALK", "TRANSIT"],
             )
 
