@@ -2,6 +2,7 @@
 scratch.py
 ted/config.py
 .vscode
+run_catalog.csv
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

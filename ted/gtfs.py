@@ -186,6 +186,50 @@ def remove_premium_routes_from_gtfs(gtfs_folder: str, output_folder: str, premiu
     print(f"Done removing premium routes from {gtfs_folder}!")
 
 
+def check_valid_dates(gtfs_folder: str, week_of_deltas: list[int]):
+    """Check a gtfs feeds to see if dates are covered by the feed, assumes the mondays are 
+
+    Parameters
+    ----------
+    gtfs_folder : str
+        Path to the gtfs folder of the region to check
+
+    week_of_deltas : list[ str ]
+        List of days from the monday of the week that is to be checked
+    """
+
+    dates_not_covered = dict()
+    gtfs_path = os.listdir(gtfs_folder)
+
+    for date in gtfs_path:
+        dated_folder = os.path.join(gtfs_folder,date)
+        agency_feeds = os.listdir(dated_folder)
+        dt_date = datetime.datetime.strptime(date, "%Y-%m-%d").date()
+        print(f"Now parsing {date}:")
+
+        for agency_feed in agency_feeds:
+            agency_name = agency_feed.removesuffix('.zip')
+            feed_zip = os.path.join(dated_folder,agency_feed)
+            feed_df = GTFS.load_zip(feed_zip)
+            days_to_check = []
+            dates_not_covered[agency_name] = []
+
+            for delta_ent in week_of_deltas:
+                delt = dt_date + datetime.timedelta(days=delta_ent)
+                days_to_check.append(delt)
+            
+            for day in days_to_check:
+                covered = feed_df.valid_date(day)
+                if not covered:
+                    day_str = datetime.date.strftime(day, "%Y-%m-%d")
+                    dates_not_covered[agency_name].append(day_str)
+
+            if len(dates_not_covered[agency_name]) > 0:
+                print(f"In {date} - {agency_feed}: dates not covered are: {dates_not_covered[agency_name]}\n")
+
+    print("Finished check_valid_dates")
+
+
 def stops_in_block_groups(
     gtfs_folder, block_groups: geopandas.GeoDataFrame, date: datetime.date, buffer=400
 ) -> pandas.DataFrame:
