@@ -195,7 +195,7 @@ def check_valid_dates(gtfs_folder: str, week_of_deltas: list[int]):
         Path to the gtfs folder of the region to check
 
     deltas_week_of : list[ str ]
-        List of days from the monday of the week that is to be checked
+        List of day deltas from the date of the week in the gtfs_folder that is to be checked
     """
 
     dates_not_covered = dict()
