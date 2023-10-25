@@ -194,18 +194,20 @@ def check_valid_dates(gtfs_folder: str, week_of_deltas: list[int]):
     gtfs_folder : str
         Path to the gtfs folder of the region to check
 
-    week_of_deltas : list[ str ]
+    deltas_week_of : list[ str ]
         List of days from the monday of the week that is to be checked
     """
 
     dates_not_covered = dict()
+    trips_not_covered = dict()
+
     gtfs_path = os.listdir(gtfs_folder)
 
     for date in gtfs_path:
         dated_folder = os.path.join(gtfs_folder,date)
         agency_feeds = os.listdir(dated_folder)
         dt_date = datetime.datetime.strptime(date, "%Y-%m-%d").date()
-        print(f"Now parsing {date}:")
+        print(f"\nNow parsing {date}:")
 
         for agency_feed in agency_feeds:
             agency_name = agency_feed.removesuffix('.zip')
@@ -213,6 +215,7 @@ def check_valid_dates(gtfs_folder: str, week_of_deltas: list[int]):
             feed_df = GTFS.load_zip(feed_zip)
             days_to_check = []
             dates_not_covered[agency_name] = []
+            trips_not_covered[agency_name] = []
 
             for delta_ent in week_of_deltas:
                 delt = dt_date + datetime.timedelta(days=delta_ent)
@@ -220,12 +223,19 @@ def check_valid_dates(gtfs_folder: str, week_of_deltas: list[int]):
             
             for day in days_to_check:
                 covered = feed_df.valid_date(day)
+                no_trips = feed_df.date_trips(day)
+
                 if not covered:
                     day_str = datetime.date.strftime(day, "%Y-%m-%d")
                     dates_not_covered[agency_name].append(day_str)
 
+                elif no_trips.empty:
+                    trips_not_covered[agency_name].append(day_str)
+                
             if len(dates_not_covered[agency_name]) > 0:
-                print(f"In {date} - {agency_feed}: dates not covered are: {dates_not_covered[agency_name]}\n")
+                print(f"{agency_feed} HAS INVALID DATES ON {dates_not_covered[agency_name]}")
+            if len(trips_not_covered[agency_name]) > 0:
+                print(f"{agency_feed} HAS NO TRIPS ON {trips_not_covered[agency_name]}")
 
     print("Finished check_valid_dates")
 
