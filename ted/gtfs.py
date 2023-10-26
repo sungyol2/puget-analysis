@@ -93,53 +93,55 @@ def check_routes_in_gtfs(gtfs_folder: str):
 
     Parameters
     ----------
-    gtfs_folder : str 
+    gtfs_folder : str
         Path to the gtfs folder for a set of regional data
     """
-    
+
     agency_stops_masterlist = {
-    "date": [],
-    "total_stops": [],
-    "total_unique_stops": [],
-    "total_invalid_feeds": [],
+        "date": [],
+        "total_stops": [],
+        "total_unique_stops": [],
+        "total_invalid_feeds": [],
     }
 
     for date_entry in os.listdir(gtfs_folder):
-    
         print(f"\nNow parsing {date_entry}...\n")
-        date_file = os.path.join(gtfs_folder,date_entry)
+        date_file = os.path.join(gtfs_folder, date_entry)
 
-        #get a list of the unique stops in dated feed
+        # get a list of the unique stops in dated feed
         stops = get_all_stops(date_file)
-        stop_id_list = (stops.loc[:,'stop_id'])
+        stop_id_list = stops.loc[:, "stop_id"]
         unique_stop_id_list = pd.unique(stop_id_list)
         invalid_feed_id_list = []
         stop_id_list = stop_id_list.tolist()
         unique_stop_id_list = pd.unique(unique_stop_id_list)
 
         agencies = os.listdir(date_file)
-        #make a list with invalid agencies
+        # make a list with invalid agencies
         for agency in agencies:
-            if agency.startswith('._') and (agency.endswith('.zip') or agency.endswith('.csv')):
+            if agency.startswith("._") and (agency.endswith(".zip") or agency.endswith(".csv")):
                 invalid_feed_id_list.append(agency)
-        
-        #get total amount of stops and unique stops
+
+        # get total amount of stops and unique stops
         total_stops = len(stop_id_list)
         total_unique_stops = len(unique_stop_id_list)
         total_invalid_feeds = len(invalid_feed_id_list)
 
-        #add data to masterlist
-        agency_stops_masterlist['date'].append(date_entry)
-        agency_stops_masterlist['total_stops'].append(total_stops)
-        agency_stops_masterlist['total_unique_stops'].append(total_unique_stops)
-        agency_stops_masterlist['total_invalid_feeds'].append(total_invalid_feeds)
+        # add data to masterlist
+        agency_stops_masterlist["date"].append(date_entry)
+        agency_stops_masterlist["total_stops"].append(total_stops)
+        agency_stops_masterlist["total_unique_stops"].append(total_unique_stops)
+        agency_stops_masterlist["total_invalid_feeds"].append(total_invalid_feeds)
 
-        #TODO: Figure out how to get this working vvv
-        #print(f"Date summary:\n{GTFS.routes_summary(date=date.fromisoformat(date_entry))}")
-        print(f"\nDone parsing, {date_entry} has...\nTotal stops: {total_stops}\nTotal unique stops: {total_unique_stops}\nTotal invalid feeds: {total_invalid_feeds}")
+        # TODO: Figure out how to get this working vvv
+        # print(f"Date summary:\n{GTFS.routes_summary(date=date.fromisoformat(date_entry))}")
+        print(
+            f"\nDone parsing, {date_entry} has...\nTotal stops: {total_stops}\nTotal unique stops: {total_unique_stops}\nTotal invalid feeds: {total_invalid_feeds}"
+        )
 
     masterlist_df = pd.DataFrame(agency_stops_masterlist)
     print(f"\nMaster List:\n{masterlist_df}")
+
 
 def remove_routes_from_gtfs(gtfs_path: str, output_folder: str, route_ids: list[str]):
     # Open/load the GTFS files
@@ -254,7 +256,7 @@ def remove_premium_routes_from_gtfs(gtfs_folder: str, output_folder: str, premiu
 
 
 def check_valid_dates(gtfs_folder: str, week_of_deltas: list[int]):
-    """Check a gtfs feeds to see if dates are covered by the feed, assumes the mondays are 
+    """Check a gtfs feeds to see if dates are covered by the feed, assumes the mondays are
 
     Parameters
     ----------
@@ -271,14 +273,14 @@ def check_valid_dates(gtfs_folder: str, week_of_deltas: list[int]):
     gtfs_path = os.listdir(gtfs_folder)
 
     for date in gtfs_path:
-        dated_folder = os.path.join(gtfs_folder,date)
+        dated_folder = os.path.join(gtfs_folder, date)
         agency_feeds = os.listdir(dated_folder)
         dt_date = datetime.datetime.strptime(date, "%Y-%m-%d").date()
         print(f"\nNow parsing {date}:")
 
         for agency_feed in agency_feeds:
-            agency_name = agency_feed.removesuffix('.zip')
-            feed_zip = os.path.join(dated_folder,agency_feed)
+            agency_name = agency_feed.removesuffix(".zip")
+            feed_zip = os.path.join(dated_folder, agency_feed)
             feed_df = GTFS.load_zip(feed_zip)
             days_to_check = []
             dates_not_covered[agency_name] = []
@@ -287,7 +289,7 @@ def check_valid_dates(gtfs_folder: str, week_of_deltas: list[int]):
             for delta_ent in week_of_deltas:
                 delt = dt_date + datetime.timedelta(days=delta_ent)
                 days_to_check.append(delt)
-            
+
             for day in days_to_check:
                 covered = feed_df.valid_date(day)
                 no_trips = feed_df.date_trips(day)
@@ -298,13 +300,54 @@ def check_valid_dates(gtfs_folder: str, week_of_deltas: list[int]):
 
                 elif no_trips.empty:
                     trips_not_covered[agency_name].append(day_str)
-                
+
             if len(dates_not_covered[agency_name]) > 0:
                 print(f"{agency_feed} HAS INVALID DATES ON {dates_not_covered[agency_name]}")
             if len(trips_not_covered[agency_name]) > 0:
                 print(f"{agency_feed} HAS NO TRIPS ON {trips_not_covered[agency_name]}")
 
     print("Finished check_valid_dates")
+
+
+def extend_calendar_dates(gtfs_folder, output_folder, days_ahead_to_extend):
+    """Extend GTFS files as needed to cover analysis dates.
+
+    Parameters
+    ----------
+    gtfs_folder : str
+        The path to the existing gtfs files
+    output_folder : str
+        A folder to put the updated GTFS files
+    days_ahead_to_extend : int
+        The number of days ahead of the folder date to check
+    """
+    for week_of in os.listdir(gtfs_folder):
+        print(f"Checking {week_of}")
+        min_date = datetime.datetime.strptime(week_of, "%Y-%m-%d").date()
+        max_date = min_date + datetime.timedelta(days=days_ahead_to_extend)
+        output_week_folder = os.path.join(output_folder, week_of)
+        if not os.path.exists(output_week_folder):
+            os.mkdir(output_week_folder)
+        for feed in os.listdir(os.path.join(gtfs_folder, week_of)):
+            gtfs = GTFS.load_zip(os.path.join(gtfs_folder, week_of, feed))
+            summary = gtfs.summary()
+            min_feed_date = datetime.datetime.strptime(summary["first_date"], "%Y%m%d").date()
+            max_feed_date = datetime.datetime.strptime(summary["last_date"], "%Y%m%d").date()
+            print("  Min:", min_feed_date, "vs what we want which is", min_date)
+            print("  Max:", max_feed_date, "vs what we want which is", max_date)
+            if min_feed_date > min_date:
+                if gtfs.calendar is not None:
+                    gtfs.calendar["start_date"] = min_date.strftime("%Y%m%d")
+                    print("    Extended", feed, "start date")
+                else:
+                    print("    Want to extend minimum, no calendar file")
+            if max_feed_date < max_date:
+                if gtfs.calendar is not None:
+                    gtfs.calendar["end_date"] = min_date.strftime("%Y%m%d")
+                    print("    Extended", feed, "end date")
+                else:
+                    print("    Want to extend maximum, no calendar file")
+            gtfs.write_zip(os.path.join(output_week_folder, feed))
 
 
 def stops_in_block_groups(
