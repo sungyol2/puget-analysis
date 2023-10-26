@@ -219,7 +219,8 @@ def remove_premium_routes_from_gtfs(gtfs_folder: str, output_folder: str, premiu
     for curr_dated_entry in dated_entries:
         # Make target output folder with the '-limited' tag
         dated_output_path = os.path.join(output_folder, curr_dated_entry + "-limited")
-        os.mkdir(dated_output_path)
+        if not os.path.exists(dated_output_path):
+            os.mkdir(dated_output_path)
         zip_entries = os.listdir(os.path.join(gtfs_folder, curr_dated_entry))
         # Iterate through .zip entries
         for curr_zip_entry in zip_entries:
