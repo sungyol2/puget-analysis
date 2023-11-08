@@ -280,6 +280,7 @@ def check_valid_dates(gtfs_folder: str, week_of_deltas: list[int]):
         print(f"\nNow parsing {date}:")
 
         for agency_feed in agency_feeds:
+            print("-->", date, agency_feed, "<--")
             agency_name = agency_feed.removesuffix(".zip")
             feed_zip = os.path.join(dated_folder, agency_feed)
             feed_df = GTFS.load_zip(feed_zip)
@@ -294,20 +295,38 @@ def check_valid_dates(gtfs_folder: str, week_of_deltas: list[int]):
             for day in days_to_check:
                 covered = feed_df.valid_date(day)
                 no_trips = feed_df.date_trips(day)
+                day_str = datetime.date.strftime(day, "%Y-%m-%d")
 
                 if not covered:
-                    day_str = datetime.date.strftime(day, "%Y-%m-%d")
-                    dates_not_covered[agency_name].append(day_str)
+                    dates_not_covered[agency_name].append(day)
 
                 elif no_trips.empty:
-                    trips_not_covered[agency_name].append(day_str)
+                    trips_not_covered[agency_name].append(day)
 
             if len(dates_not_covered[agency_name]) > 0:
-                print(f"{agency_feed} HAS INVALID DATES ON {dates_not_covered[agency_name]}")
+                print(
+                    f"{agency_feed} HAS INVALID DATES ON {[i.strftime('%a %b %d, %Y') for i in dates_not_covered[agency_name]]}"
+                )
             if len(trips_not_covered[agency_name]) > 0:
-                print(f"{agency_feed} HAS NO TRIPS ON {trips_not_covered[agency_name]}")
+                print(
+                    f"{agency_feed} HAS NO TRIPS ON {[i.strftime('%a %b %d, %Y') for i in trips_not_covered[agency_name]]}"
+                )
 
     print("Finished check_valid_dates")
+
+
+def keep_only_feeds_in(gtfs_folder, feed_ids, include_zero=True):
+    if include_zero and 0 not in feed_ids:
+        feed_ids.append(0)
+
+    for feed_date in os.listdir(gtfs_folder):
+        date_folder = os.path.join(gtfs_folder, feed_date)
+        for feed in os.listdir(date_folder):
+            # Get the feed_id
+            feed_id = int(os.path.splitext(feed)[0].split("-")[-1])
+            if feed_id not in feed_ids:
+                print(f"{feed_date}: Deleting", feed)
+                os.remove(os.path.join(date_folder, feed))
 
 
 def extend_calendar_dates(gtfs_folder, output_folder, days_ahead_to_extend):
@@ -422,7 +441,9 @@ def summarize_gtfs_data(gtfs_folder, date: datetime.date) -> pandas.DataFrame:
     return pandas.DataFrame(summaries)
 
 
-def match_with_mobility_database(gtfs_folder, custom_mdb_path=None):
+def match_with_mobility_database(
+    gtfs_folder, custom_mdb_path=None, exising_mapping: pandas.DataFrame = None
+) -> pandas.DataFrame:
     if custom_mdb_path is None:
         mdb = fetch_mobility_database()
     else:
@@ -431,45 +452,73 @@ def match_with_mobility_database(gtfs_folder, custom_mdb_path=None):
     mdb = mdb[mdb.data_type == "gtfs"]
     mdb = mdb[mdb["location.country_code"] == "US"][["mdb_source_id", "location.subdivision_name", "provider", "name"]]
     mdb["slugified"] = mdb.provider.apply(slugify)
+    new_mapping = {"from_id": [], "to_slug": []}
     # Let's go through the folder and see what we can do
     for filename in os.listdir(gtfs_folder):
-        try:
-            gtfs = GTFS.load_zip(os.path.join(gtfs_folder, filename))
-            if gtfs.agency.shape[0] > 1:
-                print("WARNING: Multiple agencies exist")
-            agency_name = slugify(gtfs.agency.iloc[0].agency_name)
-            print("Matching", os.path.splitext(filename)[0], f"({agency_name})")
-            print("Route Types:", gtfs.routes.route_type.unique())
-            mdb_matches = mdb[mdb.slugified.str.contains(agency_name)]
-            if mdb_matches.shape[0] == 0:
-                print(" Can't find a match for", agency_name)
-                # Let's get close matches
-                close_matches = difflib.get_close_matches(agency_name, mdb.slugified)
-                if len(close_matches) > 0:
-                    print(mdb[mdb.slugified.isin(close_matches)])
-                    mdb_id = int(input("Enter correct mdb_source_id: "))
-                else:
-                    mdb_id = int(input("No match found. Enter mdb_id: "))
-            if mdb_matches.shape[0] == 1:
-                mdb_id = mdb_matches.iloc[0].mdb_source_id.astype(int)
-            if mdb_matches.shape[0] > 1:
-                print(mdb_matches)
-                mdb_id = int(input("Enter correct mdb_source_id: "))
+        filename_base = os.path.splitext(filename)[0]
+        # First check if there's a mapping
+        if exising_mapping is not None and filename_base in exising_mapping["from_id"].to_list():
+            print("   Found an existing mapping for", filename_base)
+            slug = exising_mapping[exising_mapping["from_id"] == filename_base].iloc[0]["to_slug"]
 
-            if mdb_id > 0:
-                row = mdb[mdb.mdb_source_id == mdb_id].iloc[0]
-                slug = slugify(
-                    f"{row['location.subdivision_name']} {row['provider']} {row['name']} {row['mdb_source_id']}"
-                )
+            if slug == "delete":
+                print(f"  Deleting {filename}")
+                os.remove(os.path.join(gtfs_folder, filename))
             else:
-                slug = input("Enter Custom Slug: ")
-
-            print(f"  {filename} --> {slug}.zip")
-            os.rename(os.path.join(gtfs_folder, filename), os.path.join(gtfs_folder, f"{slug}.zip"))
+                print(f"  {filename} --> {slug}.zip")
+                os.rename(os.path.join(gtfs_folder, filename), os.path.join(gtfs_folder, f"{slug}.zip"))
             print()
 
-        except zipfile.BadZipFile:
-            print(filename, "is not a valid zipfile, skipping...")
+            new_mapping["from_id"].append(filename_base)
+            new_mapping["to_slug"].append(slug)
+        else:
+            try:
+                print("  Loading", filename)
+                gtfs = GTFS.load_zip(os.path.join(gtfs_folder, filename))
+                if gtfs.agency.shape[0] > 1:
+                    print("WARNING: Multiple agencies exist")
+                agency_name = slugify(gtfs.agency.iloc[0].agency_name)
+                print("Matching", filename_base, f"({agency_name})")
+                print("Route Types:", gtfs.routes.route_type.unique())
+                mdb_matches = mdb[mdb.slugified.str.contains(agency_name)]
+                if mdb_matches.shape[0] == 0:
+                    print(" Can't find a match for", agency_name)
+                    # Let's get close matches
+                    close_matches = difflib.get_close_matches(agency_name, mdb.slugified)
+                    if len(close_matches) > 0:
+                        print(mdb[mdb.slugified.isin(close_matches)])
+                        mdb_id = int(input("Enter correct mdb_source_id: "))
+                    else:
+                        mdb_id = int(input("No match found. Enter mdb_id: "))
+                if mdb_matches.shape[0] == 1:
+                    mdb_id = mdb_matches.iloc[0].mdb_source_id.astype(int)
+                if mdb_matches.shape[0] > 1:
+                    print(mdb_matches)
+                    mdb_id = int(input("Enter correct mdb_source_id: "))
+
+                if mdb_id > 0:
+                    row = mdb[mdb.mdb_source_id == mdb_id].iloc[0]
+                    slug = slugify(
+                        f"{row['location.subdivision_name']} {row['provider']} {row['name']} {row['mdb_source_id']}"
+                    )
+                else:
+                    slug = input("Enter Custom Slug or 'delete' to delete: ")
+
+                if slug == "delete":
+                    print(f"  Deleting {filename}")
+                    os.remove(os.path.join(gtfs_folder, filename))
+                else:
+                    print(f"  {filename} --> {slug}.zip")
+                    os.rename(os.path.join(gtfs_folder, filename), os.path.join(gtfs_folder, f"{slug}.zip"))
+                print()
+
+                new_mapping["from_id"].append(filename_base)
+                new_mapping["to_slug"].append(slug)
+
+            except zipfile.BadZipFile:
+                print(filename, "is not a valid zipfile, skipping...")
+
+    return pandas.DataFrame(new_mapping)
 
 
 def compute_transit_service_intensity(gtfs_folder, date: datetime.date) -> pandas.DataFrame:

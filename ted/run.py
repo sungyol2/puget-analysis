@@ -25,7 +25,7 @@ BGNAME = "BG20"
 #: The tag we use for limited sets
 LIMITED_TAG = "limited"
 #: Size of the Transit Service Intensity buffer to use (meters)
-TSI_BUFFER_SIZE = 200
+TSI_BUFFER_SIZE = 402.336
 
 
 class Run:
@@ -65,7 +65,7 @@ class Run:
             with open(region["config"]) as infile:
                 region_config = yaml.safe_load(infile)
 
-            print(f"Running {region_config['name']}")
+            print(f"Running {region_config['name']} for {self.week_of}")
 
             # Create a folder for the region if it doesn't exist
             region_folder = os.path.join(self.base_folder, region_key)
@@ -91,43 +91,48 @@ class Run:
                     region_config, centroids, gtfs_folder, region_folder, region["runs"], f"{LIMITED_TAG}_matrix"
                 )
             if region["tsi"]:
+                print("Computing Transit Service Intensity")
                 # Need to get the shapes
                 areas = gpd.read_file(region_config["gpkg"], layer=region_config["areas_layer"])
                 areas.geometry = areas.geometry.buffer(TSI_BUFFER_SIZE)
-                # Now we load the stops for each region
-                gtfs_folder = os.path.join(region_config["gtfs"], self.week_of)
-                print("Computing Transit Service Intensity")
-                all_stops = get_all_stops(gtfs_folder).to_crs(areas.crs)
+                runs = []
                 for run_key, run in region["runs"].items():
-                    print("  Calculating TSI for", run_key)
-                    start_time = run
-                    end_time = start_time + datetime.timedelta(hours=2)
-                    run_folder = os.path.join(region_folder, run_key)
-                    create_folder_safely(run_folder)
-                    results = {BGNAME: [], "run_key": [], "tsi": []}
-                    count = 1
-                    total = areas.shape[0]
-                    for idx, bg in areas.iterrows():
-                        if count % 100 == 0:
-                            print(f"  {100 * count/total} percent complete.")
-                        count += 1
-                        subset = all_stops[all_stops.within(bg.geometry)]
-                        agency_list = subset["agency"].unique()
-                        unique_trips = 0
-                        for agency in agency_list:
-                            gtfs = GTFS.load_zip(os.path.join(gtfs_folder, f"{agency}.zip"))
-                            unique_trips += gtfs.unique_trip_count_at_stops(
-                                stop_ids=subset[subset.agency == agency].stop_id.tolist(),
+                    areas[run_key] = 0
+                    runs.append(run_key)
+                # Now we get the stops in the region
+                gtfs_folder = os.path.join(region_config["gtfs"], "full", self.week_of)
+                all_stops = get_all_stops(gtfs_folder).to_crs(areas.crs)
+                print("Starting TSI computation")
+                for agency in all_stops.agency.unique():
+                    print("  Computing for", agency)
+                    # Load the zipfile
+                    agency_stops = all_stops[all_stops.agency == agency].copy()
+                    gtfs = GTFS.load_zip(os.path.join(gtfs_folder, f"{agency}.zip"))
+                    # Compute the spatial intersection
+                    joined = gpd.sjoin(
+                        left_df=agency_stops[["stop_id", "geometry"]], right_df=areas[[BGNAME, "geometry"]]
+                    )
+                    # Let's get the TSI
+                    for bg in joined.BG20.unique():
+                        # print("  Checking", bg)
+                        stops = joined[joined.BG20 == bg]["stop_id"].tolist()
+                        # print("  Found", len(stops), "stops.")
+                        for run_key, run in region["runs"].items():
+                            # print("    Checking on", run_key)
+                            start_time = run
+                            end_time = start_time + datetime.timedelta(hours=2)
+                            tsi = gtfs.unique_trip_count_at_stops(
+                                stops,
                                 date=start_time.date(),
                                 start_time=start_time.strftime("%H:%M:%S"),
                                 end_time=end_time.strftime("%H:%M:%S"),
                             )
-                        results[BGNAME].append(bg[BGNAME])
-                        results["run_key"].append(run_key)
-                        results["tsi"].append(unique_trips / 2)
-
-                    df = pandas.DataFrame(results)
-                    df.to_csv(os.path.join(run_folder, "tsi.csv"), index=False)
+                            areas.loc[areas.BG20 == bg, run_key] += tsi
+                # Finish off by joining in items
+                runs.append(BGNAME)
+                out = areas[runs].set_index(BGNAME)
+                out.to_csv(os.path.join(region_folder, "tsi.csv"))
+                #     df.to_csv(os.path.join(run_folder, "tsi.csv"), index=False)
             if region["access"]:
                 print("Computing access metrics")
                 # Compute access metrics
