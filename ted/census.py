@@ -1,6 +1,6 @@
 import geopandas
 import pandas
-from pygris import block_groups
+from pygris import block_groups, tracts
 from pygris.data import get_census
 
 demographic_categories = {
@@ -29,6 +29,33 @@ age_categories = [
     "B01001_048E",
     "B01001_049E",
 ]
+
+
+def get_state_tracts_by_year(states: list, year: int) -> geopandas.GeoDataFrame:
+    gdfs = []
+    for state in states:
+        gdfs.append(
+            tracts(str(state).lower(), year=year)[["GEOID", "geometry"]].rename(
+                columns={"GEOID": f"TR{str(year)[2:]}"}
+            )
+        )
+    return pandas.concat(gdfs, axis="index")
+
+
+def get_state_tract_centroids(states: list) -> geopandas.GeoDataFrame:
+    gdfs = []
+    for state in states:
+        df = pandas.read_csv(
+            f"https://www2.census.gov/geo/docs/reference/cenpop2020/tract/CenPop2020_Mean_TR{state}.txt",
+            dtype={"COUNTYFP": str, "STATEFP": str, "TRACTCE": str, "BLKGRPCE": str},
+        )
+        df["TR20"] = df.STATEFP + df.COUNTYFP + df.TRACTCE
+        gdfs.append(
+            geopandas.GeoDataFrame(
+                df, geometry=geopandas.points_from_xy(df.LONGITUDE, df.LATITUDE)
+            )
+        )
+    return pandas.concat(gdfs, axis="index")
 
 
 def get_state_block_groups_by_year(states: list, year: int) -> geopandas.GeoDataFrame:
@@ -89,7 +116,9 @@ def get_jobs_by_year(
         df = pandas.read_csv(url, dtype={"w_geocode": str})[["w_geocode", "C000"]]
         # Get the Crosswalk data
         url = f"https://lehd.ces.census.gov/data/lodes/LODES8/{state}/{state}_xwalk.csv.gz"
-        xwk = pandas.read_csv(url, dtype={"tabblk2020": str, "bgrp": str})[["tabblk2020", "bgrp"]]
+        xwk = pandas.read_csv(url, dtype={"tabblk2020": str, "bgrp": str})[
+            ["tabblk2020", "bgrp"]
+        ]
         both = pandas.merge(df, xwk, left_on="w_geocode", right_on="tabblk2020")
         both = both[["bgrp", "C000"]].groupby("bgrp", as_index=False).sum()
         dfs.append(both)
@@ -99,7 +128,9 @@ def get_jobs_by_year(
         block_groups[~block_groups[bg_column].isin(all.bgrp)].shape[0],
         "empty block groups, filling with 0",
     )
-    merged = pandas.merge(block_groups, all, left_on="BG20", right_on="bgrp", how="left").fillna(0)[["BG20", "C000"]]
+    merged = pandas.merge(
+        block_groups, all, left_on="BG20", right_on="bgrp", how="left"
+    ).fillna(0)[["BG20", "C000"]]
     merged["C000"] = merged["C000"].astype(int)
     return merged
 
@@ -118,7 +149,9 @@ def fetch_demographic_data(block_groups: pandas.DataFrame) -> pandas.DataFrame:
     print("Downloading demographic data")
     block_groups["state"] = block_groups["bg_id"].str[:2]
     block_groups["county"] = block_groups["bg_id"].str[2:5]
-    states_and_counties = block_groups[["state", "county"]].drop_duplicates().sort_values("state")
+    states_and_counties = (
+        block_groups[["state", "county"]].drop_duplicates().sort_values("state")
+    )
     all_data = []
     # First we fetch all the easy ones
     variables = [i for i in demographic_categories.keys()]
@@ -165,7 +198,9 @@ def fetch_demographic_data(block_groups: pandas.DataFrame) -> pandas.DataFrame:
         )
         all_hhld["tract_id"] = all_hhld["GEOID"].str[:-1]
         all_hhld[total_hhld] = all_hhld[total_hhld].astype(int)
-        all_hhld_gb = all_hhld[["tract_id", total_hhld]].groupby("tract_id", as_index=False).sum()
+        all_hhld_gb = (
+            all_hhld[["tract_id", total_hhld]].groupby("tract_id", as_index=False).sum()
+        )
         all_hhld = pandas.merge(all_hhld, all_hhld_gb, how="left", on="tract_id")
         # Create a proportion table for assignment
         all_hhld.columns = ["bg_hhld", "bg_id", "tract_id", "tract_hhld"]
@@ -185,7 +220,9 @@ def fetch_demographic_data(block_groups: pandas.DataFrame) -> pandas.DataFrame:
         )
 
         zc_hhld[zero_car_hhld] = zc_hhld[zero_car_hhld].astype(int)
-        zc_all = pandas.merge(all_hhld, zc_hhld, how="left", left_on="tract_id", right_on="GEOID")
+        zc_all = pandas.merge(
+            all_hhld, zc_hhld, how="left", left_on="tract_id", right_on="GEOID"
+        )
         zc_all["zero_car_hhld"] = zc_all[zero_car_hhld] * zc_all["proportion"]
         zc_all["zero_car_hhld"] = zc_all["zero_car_hhld"].fillna(0).round().astype(int)
 
@@ -212,7 +249,9 @@ def fetch_demographic_data(block_groups: pandas.DataFrame) -> pandas.DataFrame:
     return result
 
 
-def link_block_group_shapes(block_groups_2020: geopandas.GeoDataFrame, census_year: int):
+def link_block_group_shapes(
+    block_groups_2020: geopandas.GeoDataFrame, census_year: int
+):
     block_groups_2020["state"] = block_groups_2020["bg_id"].str[:2]
     # pull the block groups for that state
     dfs = []

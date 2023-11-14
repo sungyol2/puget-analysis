@@ -42,10 +42,16 @@ class ItinerariesGenerator:
         self.max_time = max_time
 
     def generate_itineraries(self, sample=0):
-        logging.info("Initializing itinerary generation")
+        print("Initializing itinerary generation")
         centroids = gpd.read_file(self.gpkg, layer=self.centroids_layer)
+        centroids = centroids.rename(columns={"TR20": "id"})
         if sample > 0:
             centroids = centroids.sample(sample).copy()
+
+        num_centroids = centroids.shape[0]
+        print(
+            f"   This itinerary matrix will have size {num_centroids} x {num_centroids} = {num_centroids*num_centroids}"
+        )
 
         # Read in the GTFS set
         gtfs_files = []
@@ -53,8 +59,9 @@ class ItinerariesGenerator:
             gtfs_files.append(os.path.join(self.gtfs, filename))
 
         # Build the full network
+        print("  Buiding network")
         network = r5py.TransportNetwork(osm_pbf=self.osm, gtfs=gtfs_files)
-        logging.info("Travel built, computing travel details")
+        print("  Network built, computing travel details")
         computer = r5py.DetailedItinerariesComputer(
             network,
             origins=centroids,
@@ -73,14 +80,17 @@ class ItinerariesGenerator:
         travel_details.replace(to_replace=[None], value=numpy.nan, inplace=True)
         travel_details["travel_time"] = pandas.to_timedelta(travel_details.travel_time)
         travel_details["wait_time"] = pandas.to_timedelta(travel_details.wait_time)
-        travel_details["travel_time"] = travel_details.travel_time.apply(lambda t: round(t.total_seconds() / 60.0, 2))
-        travel_details["wait_time"] = travel_details.wait_time.apply(lambda t: round(t.total_seconds() / 60.0, 2))
-
-        logging.debug(travel_details)
-        logging.debug(travel_details.dtypes)
+        travel_details["travel_time"] = travel_details.travel_time.apply(
+            lambda t: round(t.total_seconds() / 60.0, 2)
+        )
+        travel_details["wait_time"] = travel_details.wait_time.apply(
+            lambda t: round(t.total_seconds() / 60.0, 2)
+        )
 
         # Dump it into a folder
-        travel_details.to_parquet(os.path.join(self.output_folder, f"{self.run_id}_details.parquet"))
+        travel_details.to_parquet(
+            os.path.join(self.output_folder, f"{self.run_id}_details.parquet")
+        )
 
     @classmethod
     def from_yaml(cls, yaml_filepath):
@@ -138,7 +148,16 @@ class Itinerary:
 
 class TransitLeg:
     def __init__(
-        self, transport_mode, departure_time, feed, agency_id, route_id, start_stop_id, end_stop_id, prev_leg, next_leg
+        self,
+        transport_mode,
+        departure_time,
+        feed,
+        agency_id,
+        route_id,
+        start_stop_id,
+        end_stop_id,
+        prev_leg,
+        next_leg,
     ):
         self.transport_mode = transport_mode
         self.departure_time = departure_time
