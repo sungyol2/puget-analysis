@@ -59,7 +59,7 @@ class ItinerariesGenerator:
             gtfs_files.append(os.path.join(self.gtfs, filename))
 
         # Build the full network
-        print("  Buiding network")
+        print("  Building network")
         network = r5py.TransportNetwork(osm_pbf=self.osm, gtfs=gtfs_files)
         print("  Network built, computing travel details")
         computer = r5py.DetailedItinerariesComputer(
