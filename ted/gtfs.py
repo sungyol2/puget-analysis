@@ -53,7 +53,9 @@ def download_gtfs_using_yaml(yaml_path: str, output_folder: str, custom_mdb_path
     for idx, row in mdb.iterrows():
         url = row["urls.latest"]
         # Get a slugified filename
-        slug = slugify(f"{row['location.subdivision_name']} {row['provider']} {row['name']} {row['mdb_source_id']}")
+        slug = slugify(
+            f"{row['location.subdivision_name']} {row['provider']} {row['name']} {row['mdb_source_id']}"
+        )
         filename = f"{slug}.zip"
         print(slug)
         try:
@@ -68,7 +70,9 @@ def download_gtfs_using_yaml(yaml_path: str, output_folder: str, custom_mdb_path
             result_data["gtfs_agency_url"].append(gtfs.agency.iloc[0]["agency_url"])
 
             if "agency_fare_url" in gtfs.agency.columns:
-                result_data["gtfs_agency_fare_url"].append(gtfs.agency.iloc[0]["agency_fare_url"])
+                result_data["gtfs_agency_fare_url"].append(
+                    gtfs.agency.iloc[0]["agency_fare_url"]
+                )
             else:
                 result_data["gtfs_agency_fare_url"].append("")
             result_data["gtfs_start_date"].append(summary["first_date"])
@@ -119,7 +123,9 @@ def check_routes_in_gtfs(gtfs_folder: str):
         agencies = os.listdir(date_file)
         # make a list with invalid agencies
         for agency in agencies:
-            if agency.startswith("._") and (agency.endswith(".zip") or agency.endswith(".csv")):
+            if agency.startswith("._") and (
+                agency.endswith(".zip") or agency.endswith(".csv")
+            ):
                 invalid_feed_id_list.append(agency)
 
         # get total amount of stops and unique stops
@@ -179,7 +185,9 @@ def get_all_stops(gtfs_folder) -> geopandas.GeoDataFrame:
             print(filename, "is not a zipfile, skipping...")
 
     df = pandas.concat(stop_dfs, axis="index")
-    gdf = geopandas.GeoDataFrame(df, geometry=geopandas.points_from_xy(df.stop_lon, df.stop_lat), crs="EPSG:4326")
+    gdf = geopandas.GeoDataFrame(
+        df, geometry=geopandas.points_from_xy(df.stop_lon, df.stop_lat), crs="EPSG:4326"
+    )
     return gdf
 
 
@@ -196,7 +204,9 @@ def remove_routes_from_gtfs(gtfs_path: str, output_folder: str, route_ids: list[
     gtfs.write_zip(os.path.join(output_folder, zipfile_name))
 
 
-def remove_premium_routes_from_gtfs(gtfs_folder: str, output_folder: str, premium_routes_path: str):
+def remove_premium_routes_from_gtfs(
+    gtfs_folder: str, output_folder: str, premium_routes_path: str
+):
     """Make a copy of a GTFS folder without premium routes
 
     Parameters
@@ -231,7 +241,9 @@ def remove_premium_routes_from_gtfs(gtfs_folder: str, output_folder: str, premiu
             if not (curr_zip_entry.startswith("._")):
                 print("Currently parsing: " + curr_dated_entry + ": " + curr_zip_entry)
 
-            premium_slug_rows = premium_routes.loc[premium_routes["route_slug"] == curr_zip_slug]
+            premium_slug_rows = premium_routes.loc[
+                premium_routes["route_slug"] == curr_zip_slug
+            ]
             slug_premium_ids = (premium_slug_rows.iloc[:, 1]).tolist()
 
             # Skip slug labelled __ALL__
@@ -240,8 +252,12 @@ def remove_premium_routes_from_gtfs(gtfs_folder: str, output_folder: str, premiu
             # delete specific routes within the given slug
             else:
                 try:
-                    if curr_zip_slug in premium_routes["route_slug"].values:  # delete premium routes if it exists
-                        remove_routes_from_gtfs(curr_zip_dir, dated_output_path, slug_premium_ids)
+                    if (
+                        curr_zip_slug in premium_routes["route_slug"].values
+                    ):  # delete premium routes if it exists
+                        remove_routes_from_gtfs(
+                            curr_zip_dir, dated_output_path, slug_premium_ids
+                        )
                     else:  # not a feed containing premium routes: copy over current feed as is
                         copy = GTFS.load_zip(curr_zip_dir)
                         if not os.path.exists(dated_output_path):
@@ -351,8 +367,12 @@ def extend_calendar_dates(gtfs_folder, output_folder, days_ahead_to_extend):
         for feed in os.listdir(os.path.join(gtfs_folder, week_of)):
             gtfs = GTFS.load_zip(os.path.join(gtfs_folder, week_of, feed))
             summary = gtfs.summary()
-            min_feed_date = datetime.datetime.strptime(summary["first_date"], "%Y%m%d").date()
-            max_feed_date = datetime.datetime.strptime(summary["last_date"], "%Y%m%d").date()
+            min_feed_date = datetime.datetime.strptime(
+                summary["first_date"], "%Y%m%d"
+            ).date()
+            max_feed_date = datetime.datetime.strptime(
+                summary["last_date"], "%Y%m%d"
+            ).date()
             print("  Min:", min_feed_date, "vs what we want which is", min_date)
             print("  Max:", max_feed_date, "vs what we want which is", max_date)
             if min_feed_date > min_date:
@@ -386,7 +406,9 @@ def stops_in_block_groups(
             columns.append(column_name)
             stops = geopandas.GeoDataFrame(
                 gtfs.stops[["stop_id", "stop_lat", "stop_lon"]],
-                geometry=geopandas.points_from_xy(gtfs.stops.stop_lon, gtfs.stops.stop_lat),
+                geometry=geopandas.points_from_xy(
+                    gtfs.stops.stop_lon, gtfs.stops.stop_lat
+                ),
                 crs="EPSG:4326",
             ).to_crs(block_groups.crs)
             joined = block_groups.sjoin(stops)
@@ -394,7 +416,9 @@ def stops_in_block_groups(
             for bg_id in joined.bg_id.unique():
                 # Get the stops in that zone
                 bg_stops = joined[joined.bg_id == bg_id]
-                trips = gtfs.unique_trips_at_stops(bg_stops.stop_id.tolist(), date).shape[0]
+                trips = gtfs.unique_trips_at_stops(
+                    bg_stops.stop_id.tolist(), date
+                ).shape[0]
                 data["bg_id"].append(bg_id)
                 data[column_name].append(trips)
 
@@ -450,23 +474,33 @@ def match_with_mobility_database(
         mdb = pandas.read_csv(custom_mdb_path)
     mdb["name"] = mdb.name.fillna("")
     mdb = mdb[mdb.data_type == "gtfs"]
-    mdb = mdb[mdb["location.country_code"] == "US"][["mdb_source_id", "location.subdivision_name", "provider", "name"]]
+    mdb = mdb[mdb["location.country_code"] == "US"][
+        ["mdb_source_id", "location.subdivision_name", "provider", "name"]
+    ]
     mdb["slugified"] = mdb.provider.apply(slugify)
     new_mapping = {"from_id": [], "to_slug": []}
     # Let's go through the folder and see what we can do
     for filename in os.listdir(gtfs_folder):
         filename_base = os.path.splitext(filename)[0]
         # First check if there's a mapping
-        if exising_mapping is not None and filename_base in exising_mapping["from_id"].to_list():
+        if (
+            exising_mapping is not None
+            and filename_base in exising_mapping["from_id"].to_list()
+        ):
             print("   Found an existing mapping for", filename_base)
-            slug = exising_mapping[exising_mapping["from_id"] == filename_base].iloc[0]["to_slug"]
+            slug = exising_mapping[exising_mapping["from_id"] == filename_base].iloc[0][
+                "to_slug"
+            ]
 
             if slug == "delete":
                 print(f"  Deleting {filename}")
                 os.remove(os.path.join(gtfs_folder, filename))
             else:
                 print(f"  {filename} --> {slug}.zip")
-                os.rename(os.path.join(gtfs_folder, filename), os.path.join(gtfs_folder, f"{slug}.zip"))
+                os.rename(
+                    os.path.join(gtfs_folder, filename),
+                    os.path.join(gtfs_folder, f"{slug}.zip"),
+                )
             print()
 
             new_mapping["from_id"].append(filename_base)
@@ -475,16 +509,24 @@ def match_with_mobility_database(
             try:
                 print("  Loading", filename)
                 gtfs = GTFS.load_zip(os.path.join(gtfs_folder, filename))
+                if gtfs.feed_info is not None:
+                    name_to_check = gtfs.feed_info.iloc[0].feed_publisher_name.lower()
+                    name_to_check = slugify(name_to_check)
+                else:
+                    name_to_check = "na"
                 if gtfs.agency.shape[0] > 1:
                     print("WARNING: Multiple agencies exist")
-                agency_name = slugify(gtfs.agency.iloc[0].agency_name)
-                print("Matching", filename_base, f"({agency_name})")
+                name_to_check += "-" + slugify(gtfs.agency.iloc[0].agency_name)
+                name_to_check = name_to_check.replace("-gtfs-", "")
+                print("Matching", filename_base, f"({name_to_check})")
                 print("Route Types:", gtfs.routes.route_type.unique())
-                mdb_matches = mdb[mdb.slugified.str.contains(agency_name)]
+                mdb_matches = mdb[mdb.slugified.str.contains(name_to_check)]
                 if mdb_matches.shape[0] == 0:
-                    print(" Can't find a match for", agency_name)
+                    print(" Can't find a match for", name_to_check)
                     # Let's get close matches
-                    close_matches = difflib.get_close_matches(agency_name, mdb.slugified)
+                    close_matches = difflib.get_close_matches(
+                        name_to_check, mdb.slugified
+                    )
                     if len(close_matches) > 0:
                         print(mdb[mdb.slugified.isin(close_matches)])
                         mdb_id = int(input("Enter correct mdb_source_id: "))
@@ -509,7 +551,10 @@ def match_with_mobility_database(
                     os.remove(os.path.join(gtfs_folder, filename))
                 else:
                     print(f"  {filename} --> {slug}.zip")
-                    os.rename(os.path.join(gtfs_folder, filename), os.path.join(gtfs_folder, f"{slug}.zip"))
+                    os.rename(
+                        os.path.join(gtfs_folder, filename),
+                        os.path.join(gtfs_folder, f"{slug}.zip"),
+                    )
                 print()
 
                 new_mapping["from_id"].append(filename_base)
@@ -521,7 +566,9 @@ def match_with_mobility_database(
     return pandas.DataFrame(new_mapping)
 
 
-def compute_transit_service_intensity(gtfs_folder, date: datetime.date) -> pandas.DataFrame:
+def compute_transit_service_intensity(
+    gtfs_folder, date: datetime.date
+) -> pandas.DataFrame:
     for filename in os.listdir(gtfs_folder):
         try:
             gtfs = GTFS.load_zip(os.path.join(gtfs_folder, filename))

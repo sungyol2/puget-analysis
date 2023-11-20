@@ -50,7 +50,7 @@ class ItinerariesGenerator:
 
         num_centroids = centroids.shape[0]
         print(
-            f"   This itinerary matrix will have size {num_centroids} x {num_centroids} = {num_centroids*num_centroids}"
+            f"  This itinerary matrix will have size {num_centroids} x {num_centroids} = {num_centroids*num_centroids}"
         )
 
         # Read in the GTFS set
