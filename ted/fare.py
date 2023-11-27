@@ -1,6 +1,9 @@
 import datetime
+import json
 import logging
 import os
+import requests
+from pytz import timezone
 
 import geopandas as gpd
 import numpy
@@ -222,3 +225,133 @@ class FixedFare(BaseFare):
 class ZoneFare(BaseFare):
     def __init__(self, start_time, max_time, max_transfers, start_zone, end_zone):
         super().__init__(start_time, max_time, max_transfers)
+
+
+class OTPQuery:
+    OTP_ENDPOINT = "http://localhost:8080/otp/routers/default/index/graphql"
+
+    def __init__(self, feeds):
+        self.feeds = feeds
+
+    def query_route(
+        self,
+        from_id: str,
+        to_id: str,
+        from_lat: float,
+        from_lon: float,
+        to_lat: float,
+        to_lon: float,
+        start_datetime: datetime.datetime,
+    ) -> pandas.DataFrame:
+        q = f"""
+            {{
+                plan(
+                    from: {{ lat: {from_lat}, lon: {from_lon} }},
+                    to: {{ lat: {to_lat}, lon: {to_lon} }},
+                    date: "{start_datetime.strftime("%Y-%m-%d")}",
+                    time: "{start_datetime.strftime("%H:%M")}",
+                    transportModes: [
+                        {{
+                            mode: WALK
+                        }},
+                        {{
+                            mode: TRANSIT
+                        }},
+                    ]) {{
+                    itineraries {{
+                        startTime
+                        endTime
+                        legs {{
+                            mode
+                            startTime
+                            endTime
+                            from {{
+                                stop{{
+                                gtfsId
+                                }}
+                                departureTime
+                            }}
+                            to {{
+                                stop{{
+                                gtfsId
+                                }}
+                                departureTime
+                            }}
+                            route {{
+                                gtfsId
+                                agency{{
+                                    gtfsId
+                                    name
+                                }}
+                            }}
+                        }}
+                    }}
+                }}
+            }}
+            """
+        r = requests.post(self.OTP_ENDPOINT, json={"query": q})
+        itineraries = json.loads(r.text)["data"]["plan"]["itineraries"]
+        leg_data = {
+            "from_id": [],
+            "to_id": [],
+            "option": [],
+            "segment": [],
+            "mode": [],
+            "departure_time": [],
+            "feed": [],
+            "agency_id": [],
+            "route_id": [],
+            "start_stop_id": [],
+            "end_stop_id": [],
+        }
+        option_data = {"option": [], "startTime": [], "endTime": []}
+        for idx, itinerary in enumerate(itineraries):
+            option_data["option"].append(idx)
+            option_data["startTime"].append(itinerary["startTime"])
+            option_data["endTime"].append(itinerary["endTime"])
+            for lidx, leg in enumerate(itinerary["legs"]):
+                leg_data["from_id"].append(from_id)
+                leg_data["to_id"].append(to_id)
+                leg_data["option"].append(idx)
+                leg_data["segment"].append(lidx)
+                leg_data["mode"].append(leg["mode"])
+                departure_time = datetime.datetime.fromtimestamp(
+                    leg["from"]["departureTime"] / 1000, timezone("America/New_York")
+                )
+                leg_data["departure_time"].append(departure_time)
+                if leg["from"]["stop"] != None:
+                    leg_data["start_stop_id"].append(
+                        leg["from"]["stop"]["gtfsId"].split(":")[1]
+                    )
+
+                else:
+                    leg_data["start_stop_id"].append(None)
+
+                if leg["to"]["stop"] != None:
+                    leg_data["end_stop_id"].append(
+                        leg["to"]["stop"]["gtfsId"].split(":")[1]
+                    )
+                else:
+                    leg_data["end_stop_id"].append(None)
+
+                if leg["route"] != None:
+                    leg_data["route_id"].append(leg["route"]["gtfsId"].split(":")[1])
+                    leg_data["agency_id"].append(
+                        leg["route"]["agency"]["gtfsId"].split(":")[1]
+                    )
+                    leg_data["feed"].append(
+                        self.feeds[str(leg["route"]["agency"]["gtfsId"].split(":")[0])]
+                    )
+                else:
+                    leg_data["route_id"].append(None)
+                    leg_data["agency_id"].append(None)
+                    leg_data["feed"].append(None)
+
+        leg_df = pandas.DataFrame(leg_data)
+        options_df = pandas.DataFrame(option_data)
+        options_df["delta"] = (options_df.endTime - options_df.startTime) / 60000
+        try:
+            option = options_df.sort_values("delta").iloc[0].option.astype(int)
+            return leg_df[leg_df["option"] == option].drop(columns=["option"])
+        except IndexError:
+            return leg_df

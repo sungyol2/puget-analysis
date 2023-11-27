@@ -365,6 +365,7 @@ def extend_calendar_dates(gtfs_folder, output_folder, days_ahead_to_extend):
         if not os.path.exists(output_week_folder):
             os.mkdir(output_week_folder)
         for feed in os.listdir(os.path.join(gtfs_folder, week_of)):
+            print(" ", feed)
             gtfs = GTFS.load_zip(os.path.join(gtfs_folder, week_of, feed))
             summary = gtfs.summary()
             min_feed_date = datetime.datetime.strptime(
@@ -373,8 +374,8 @@ def extend_calendar_dates(gtfs_folder, output_folder, days_ahead_to_extend):
             max_feed_date = datetime.datetime.strptime(
                 summary["last_date"], "%Y%m%d"
             ).date()
-            print("  Min:", min_feed_date, "vs what we want which is", min_date)
-            print("  Max:", max_feed_date, "vs what we want which is", max_date)
+            print("    Min:", min_feed_date, "vs what we want which is", min_date)
+            print("    Max:", max_feed_date, "vs what we want which is", max_date)
             if min_feed_date > min_date:
                 if gtfs.calendar is not None:
                     gtfs.calendar["start_date"] = min_date.strftime("%Y%m%d")
@@ -630,18 +631,27 @@ class TransitLand:
         pandas.DataFrame
             A dataframe containing IDs and dates for each feed version
         """
-        feeds = self.execute("feeds", onestop_id, "feed_versions")["feed_versions"]
+        feeds = self.execute("feeds", onestop_id, "feed_versions", limit=100)[
+            "feed_versions"
+        ]
         feed_data = {
             "id": [],
+            "fetched_at": [],
             "earliest_calendar_date": [],
             "latest_calendar_date": [],
+            "sha1": [],
         }
         for f in feeds:
             feed_data["id"].append(f["id"])
+            feed_data["fetched_at"].append(f["fetched_at"])
             feed_data["earliest_calendar_date"].append(f["earliest_calendar_date"])
             feed_data["latest_calendar_date"].append(f["latest_calendar_date"])
+            feed_data["sha1"].append(f["sha1"])
 
-        return pandas.DataFrame(feed_data)
+        df = pandas.DataFrame(feed_data)
+        df["earliest_calendar_date"] = pandas.to_datetime(df["earliest_calendar_date"])
+        df["latest_calendar_date"] = pandas.to_datetime(df["latest_calendar_date"])
+        return df
 
     def search_feeds(self, search_key):
         self.print_url("feeds", search=search_key)
@@ -668,3 +678,65 @@ class TransitLand:
             agency_data["name"].append(a["name"])
 
         return pandas.DataFrame(agency_data)
+
+    def get_missing_feeds(self, gtfs_folder: str, feed_list: str, config_yaml: str):
+        pandas.set_option("display.max_rows", 200)
+        df = pandas.read_csv(
+            feed_list,
+            dtype={"mdb_name": str},
+        ).dropna(subset="onestop_id")
+        df = df[["mdb_id", "mdb_provider", "onestop_id", "mdb_name"]]
+        with open(config_yaml) as infile:
+            cfg = yaml.safe_load(infile)
+        actual_list = set(cfg["mdb_ids"])
+        print("Expecting a total of", len(actual_list), "feeds")
+        for folder in os.listdir(gtfs_folder):
+            print()
+            mdb_ids = set()
+            for gtfs_file in os.listdir(os.path.join(gtfs_folder, folder)):
+                mdb_ids.add(int(gtfs_file.split("-")[-1].split(".")[0]))
+            missing = actual_list.difference(mdb_ids)
+            print("  Missing: ", missing)
+            if len(missing) > 0:
+                subset = df[df["mdb_id"].isin(list(missing))]
+                for idx, feed in subset.iterrows():
+                    print("  Now checking", feed["onestop_id"], feed["mdb_provider"])
+                    feed_versions = self.feed_versions_id_and_dates(feed["onestop_id"])
+                    print()
+                    print(" -->", folder, "<--")
+                    print()
+                    print(
+                        feed_versions[
+                            [
+                                "earliest_calendar_date",
+                                "latest_calendar_date",
+                                "fetched_at",
+                            ]
+                        ]
+                    )
+                    idx_to_get = int(input("Enter the INDEX of the right feed: "))
+                    feed_to_get = feed_versions.loc[idx_to_get].sha1
+                    print("Fetching", feed_to_get)
+                    if str(feed["mdb_name"]) != "nan":
+                        dl = (
+                            slugify(feed["mdb_provider"])
+                            + "-"
+                            + slugify(str(feed["mdb_name"]))
+                            + "-"
+                            + str(feed["mdb_id"])
+                            + ".zip"
+                        )
+                    else:
+                        dl = (
+                            slugify(feed["mdb_provider"])
+                            + "-"
+                            + str(feed["mdb_id"])
+                            + ".zip"
+                        )
+                    print("Fetching", dl)
+                    state_slug = "california"
+                    dl = state_slug + "-" + dl
+                    self.download_feed_by_id(
+                        feed_id=feed_to_get,
+                        output_filename=os.path.join(gtfs_folder, folder, dl),
+                    )

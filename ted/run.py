@@ -77,23 +77,43 @@ class Run:
 
             if region["full_matrix"]:
                 # Read in the centroids for the region
-                centroids = gpd.read_file(region_config["gpkg"], layer=region_config["centroids_layer"])
+                centroids = gpd.read_file(
+                    region_config["gpkg"], layer=region_config["centroids_layer"]
+                )
                 centroids.rename(columns={BGNAME: "id"}, inplace=True)
                 print(f"  Running full network")
                 gtfs_folder = os.path.join(region_config["gtfs"], "full", self.week_of)
-                self.run_matrix(region_config, centroids, gtfs_folder, region_folder, region["runs"], "full_matrix")
+                self.run_matrix(
+                    region_config,
+                    centroids,
+                    gtfs_folder,
+                    region_folder,
+                    region["runs"],
+                    "full_matrix",
+                )
             if region["limited_matrix"]:
-                centroids = gpd.read_file(region_config["gpkg"], layer=region_config["centroids_layer"])
+                centroids = gpd.read_file(
+                    region_config["gpkg"], layer=region_config["centroids_layer"]
+                )
                 centroids.rename(columns={BGNAME: "id"}, inplace=True)
                 print(f"  Running limited network")
-                gtfs_folder = os.path.join(region_config["gtfs"], LIMITED_TAG, f"{self.week_of}-{LIMITED_TAG}")
+                gtfs_folder = os.path.join(
+                    region_config["gtfs"], LIMITED_TAG, f"{self.week_of}-{LIMITED_TAG}"
+                )
                 self.run_matrix(
-                    region_config, centroids, gtfs_folder, region_folder, region["runs"], f"{LIMITED_TAG}_matrix"
+                    region_config,
+                    centroids,
+                    gtfs_folder,
+                    region_folder,
+                    region["runs"],
+                    f"{LIMITED_TAG}_matrix",
                 )
             if region["tsi"]:
                 print("Computing Transit Service Intensity")
                 # Need to get the shapes
-                areas = gpd.read_file(region_config["gpkg"], layer=region_config["areas_layer"])
+                areas = gpd.read_file(
+                    region_config["gpkg"], layer=region_config["areas_layer"]
+                )
                 areas.geometry = areas.geometry.buffer(TSI_BUFFER_SIZE)
                 runs = []
                 for run_key, run in region["runs"].items():
@@ -110,7 +130,8 @@ class Run:
                     gtfs = GTFS.load_zip(os.path.join(gtfs_folder, f"{agency}.zip"))
                     # Compute the spatial intersection
                     joined = gpd.sjoin(
-                        left_df=agency_stops[["stop_id", "geometry"]], right_df=areas[[BGNAME, "geometry"]]
+                        left_df=agency_stops[["stop_id", "geometry"]],
+                        right_df=areas[[BGNAME, "geometry"]],
                     )
                     # Let's get the TSI
                     for bg in joined.BG20.unique():
@@ -136,7 +157,9 @@ class Run:
             if region["access"]:
                 print("Computing access metrics")
                 # Compute access metrics
-                supply = traccess.Supply.from_csv(region_config["supply"], dtype={"BG20": str}, id_column="BG20")
+                supply = traccess.Supply.from_csv(
+                    region_config["supply"], dtype={"BG20": str}, id_column="BG20"
+                )
                 for run_key, run in region["runs"].items():
                     run_folder = os.path.join(region_folder, run_key)
                     # Let's do full matrix first
@@ -149,32 +172,46 @@ class Run:
                     ac = traccess.AccessComputer(supply, full_cost)
                     print(f"    {run_key}: Computing c15 measures")
                     c15 = ac.cumulative_cutoff(
-                        cost_columns=["travel_time"], cutoffs=[15], supply_columns=["acres"]
+                        cost_columns=["travel_time"],
+                        cutoffs=[15],
+                        supply_columns=["acres"],
                     ).data
                     c15.columns = ["acres_c15"]
 
                     print(f"    {run_key}: Computing c30 measures")
                     c30 = ac.cumulative_cutoff(
-                        cost_columns=["travel_time"], cutoffs=[30], supply_columns=["C000", "acres"]
+                        cost_columns=["travel_time"],
+                        cutoffs=[30],
+                        supply_columns=["C000", "acres"],
                     ).data
                     c30.columns = ["C000_c30", "acres_c30"]
 
                     print(f"    {run_key}: Computing c45 measures")
                     c45 = ac.cumulative_cutoff(
-                        cost_columns=["travel_time"], cutoffs=[45], supply_columns=["C000"]
+                        cost_columns=["travel_time"],
+                        cutoffs=[45],
+                        supply_columns=["C000"],
                     ).data
                     c45.columns = ["C000_c45"]
 
                     print(f"    {run_key}: Computing c60 measures")
                     c60 = ac.cumulative_cutoff(
-                        cost_columns=["travel_time"], cutoffs=[60], supply_columns=["C000"]
+                        cost_columns=["travel_time"],
+                        cutoffs=[60],
+                        supply_columns=["C000"],
                     ).data
                     c60.columns = ["C000_c60"]
 
                     print(f"    {run_key}: Computing t1 measures")
                     t1 = ac.cost_to_closest(
                         "travel_time",
-                        ["education", "grocery", "hospitals", "pharmacies", "urgent_care_facilities"],
+                        [
+                            "education",
+                            "grocery",
+                            "hospitals",
+                            "pharmacies",
+                            "urgent_care_facilities",
+                        ],
                         n=1,
                     ).data
                     t1.columns = {f"{c}_t1" for c in t1.columns}
@@ -182,7 +219,13 @@ class Run:
                     print(f"    {run_key}: Computing t3 measures")
                     t3 = ac.cost_to_closest(
                         "travel_time",
-                        ["education", "grocery", "hospitals", "pharmacies", "urgent_care_facilities"],
+                        [
+                            "education",
+                            "grocery",
+                            "hospitals",
+                            "pharmacies",
+                            "urgent_care_facilities",
+                        ],
                         n=3,
                     ).data
                     t3.columns = {f"{c}_t3" for c in t3.columns}
@@ -199,7 +242,9 @@ class Run:
                 # Compute equity summaries
                 pass
 
-    def run_matrix(self, region, centroids, gtfs_folder, region_folder, runs, output_name):
+    def run_matrix(
+        self, region, centroids, gtfs_folder, region_folder, runs, output_name
+    ):
         gtfs_files = []
         for filename in os.listdir(gtfs_folder):
             if (not filename.startswith(".")) and (filename.endswith(".zip")):
@@ -264,28 +309,53 @@ def create_regions(root_directory):
         os.mkdir(os.path.join(date_path))
 
 
-def create_run_yamls_from_csv(csv_file, run_folder, output_folder, duration=120, max_time=180):
-    runs = pandas.read_csv(csv_file)
-    runs["WEDAM"] = pandas.to_datetime(runs.WEDAM)
-    runs["WEDPM"] = pandas.to_datetime(runs.WEDPM)
-    runs["SATAM"] = pandas.to_datetime(runs.SATAM)
-
-    # Now we go by week
-    for week_of in runs["week_of"].unique():
-        wk_df = runs[runs["week_of"] == week_of].copy()
-        run_id = f"{week_of}"
-        run_dict = dict(
-            {
-                "run_id": run_id,
-                "description": "Main Data Run",
-                "output_folder": output_folder,
-                "week_of": week_of,
-                "regions": {},
-            }
+def create_run_yamls_from_csv(
+    region_key,
+    run_catalog_path,
+    template_yaml_path,
+    results_folder,
+    runs_folder,
+    full_matrix: bool = False,
+    limited_matrix: bool = False,
+    tsi: bool = False,
+    access: bool = False,
+    equity: bool = False,
+):
+    run_catalog = pandas.read_csv(run_catalog_path)
+    with open(template_yaml_path) as infile:
+        config = yaml.safe_load(infile)
+    for idx, run in run_catalog.iterrows():
+        config["week_of"] = run["week_of"]
+        config["run_id"] = f"{run['week_of']}-{region_key}"
+        config["regions"][region_key]["access"] = access
+        config["regions"][region_key]["equity"] = equity
+        # Let's check if the full matrix exists
+        if not os.path.exists(
+            os.path.join(
+                results_folder,
+                config["run_id"],
+                region_key,
+                "SATAM",
+                "full_matrix.parquet",
+            )
+        ):
+            config["regions"][region_key]["full_matrix"] = full_matrix
+        else:
+            print("Already a full matrix")
+            config["regions"][region_key]["full_matrix"] = full_matrix
+        config["regions"][region_key]["limited_matrix"] = limited_matrix
+        config["regions"][region_key]["tsi"] = tsi
+        config["regions"][region_key]["runs"]["SATAM"] = datetime.datetime.strptime(
+            run["SATAM"], "%Y-%m-%d %H:%M:%S"
         )
-        for region in wk_df.region.uinque():
-            run_dict["regions"][region] = {"name": None}
-            rg_df = wk_df[wk_df.region == region].copy()
-            for idx, row in rg_df.iterrows():
-                filename = f"{week_of}.yaml"
-                print(run_id)
+        config["regions"][region_key]["runs"]["WEDAM"] = datetime.datetime.strptime(
+            run["WEDAM"], "%Y-%m-%d %H:%M:%S"
+        )
+        config["regions"][region_key]["runs"]["WEDPM"] = datetime.datetime.strptime(
+            run["WEDPM"], "%Y-%m-%d %H:%M:%S"
+        )
+
+        config["description"] = f"Analysis for {region_key} on {run['week_of']}"
+        outname = f"{run['week_of']}-{region_key}-MX-TSI.yaml"
+        with open(os.path.join(runs_folder, region_key, outname), "w") as outfile:
+            yaml.dump(config, outfile)
