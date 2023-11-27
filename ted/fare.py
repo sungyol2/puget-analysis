@@ -1,14 +1,18 @@
 import datetime
 import json
 import logging
+import multiprocessing
 import os
 import requests
 from pytz import timezone
+import time
 
 import geopandas as gpd
 import numpy
 import pandas
+from tqdm import tqdm
 import yaml
+
 
 import r5py
 
@@ -355,3 +359,79 @@ class OTPQuery:
             return leg_df[leg_df["option"] == option].drop(columns=["option"])
         except IndexError:
             return leg_df
+
+
+def _route_query(param_list):
+    otp = param_list[0]
+    return otp.query_route(
+        from_id=param_list[1],
+        to_id=param_list[2],
+        from_lat=param_list[3],
+        from_lon=param_list[4],
+        to_lat=param_list[5],
+        to_lon=param_list[6],
+        start_datetime=param_list[7],
+    )
+
+
+def _chunkify(l: list, n: int):
+    """Divide a list into chunks of size n
+
+    Parameters
+    ----------
+    l : list
+        The list to chunkify
+    n : int
+        The maximum chunk size
+    """
+    for i in range(0, len(l), n):
+        yield l[i : i + n]
+
+
+def run_otp_itineraries_in_parallel(fares_yaml, points, output_folder, chunk_size=30):
+    with open(fares_yaml) as infile:
+        config = yaml.safe_load(infile)
+
+    feeds = {
+        (str(key) if isinstance(key, int) else key): config["feeds"][key]
+        for key in config["feeds"]
+    }
+
+    otp = OTPQuery(feeds)
+    dfs = []
+    params_list = []
+    for odx, origin in points.iterrows():
+        for ddx, dest in points.iterrows():
+            if origin.cluster_id != dest.cluster_id:
+                params_list.append(
+                    [
+                        otp,
+                        origin.cluster_id,
+                        dest.cluster_id,
+                        origin.MEAN_Y,
+                        origin.MEAN_X,
+                        dest.MEAN_Y,
+                        dest.MEAN_X,
+                        datetime.datetime(2023, 9, 27, 7, 11),
+                    ]
+                )
+    print("Generating", len(params_list), "itineraries")
+    chunk_list = list(_chunkify(params_list, chunk_size))
+    print(f"Using chunks of size {chunk_size}")
+    cpus = multiprocessing.cpu_count() - 2
+    print(f"Using {cpus} CPUs")
+
+    start = time.time()
+    with multiprocessing.Pool(cpus) as p:
+        for idx, chunk in tqdm(enumerate(chunk_list), total=len(chunk_list)):
+            df_list = p.map(_route_query, chunk)
+            df_list = [d for d in df_list if not d.empty]
+            if len(df_list) > 0:
+                pandas.concat(df_list, axis="index").to_csv(
+                    f"{output_folder}/WAS_{idx}.csv", index=False
+                )
+            else:
+                print("Chunk", idx, "has no data")
+
+    end = time.time()
+    print("Took", end - start, "seconds")
