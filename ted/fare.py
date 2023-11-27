@@ -544,3 +544,204 @@ class ZoneFare(BaseFare):
         AND to_zone = '{self.to_zone}'"""
         res = execute_sql(sql)[0][0]
         self.cost = int(res)
+
+
+class OTPQuery:
+    OTP_ENDPOINT = "http://localhost:8080/otp/routers/default/index/graphql"
+
+    def __init__(self, feeds):
+        self.feeds = feeds
+
+    def query_route(
+        self,
+        from_id: str,
+        to_id: str,
+        from_lat: float,
+        from_lon: float,
+        to_lat: float,
+        to_lon: float,
+        start_datetime: datetime.datetime,
+    ) -> pandas.DataFrame:
+        q = f"""
+            {{
+                plan(
+                    from: {{ lat: {from_lat}, lon: {from_lon} }},
+                    to: {{ lat: {to_lat}, lon: {to_lon} }},
+                    date: "{start_datetime.strftime("%Y-%m-%d")}",
+                    time: "{start_datetime.strftime("%H:%M")}",
+                    transportModes: [
+                        {{
+                            mode: WALK
+                        }},
+                        {{
+                            mode: TRANSIT
+                        }},
+                    ]) {{
+                    itineraries {{
+                        startTime
+                        endTime
+                        legs {{
+                            mode
+                            startTime
+                            endTime
+                            from {{
+                                stop{{
+                                gtfsId
+                                }}
+                                departureTime
+                            }}
+                            to {{
+                                stop{{
+                                gtfsId
+                                }}
+                                departureTime
+                            }}
+                            route {{
+                                gtfsId
+                                agency{{
+                                    gtfsId
+                                    name
+                                }}
+                            }}
+                        }}
+                    }}
+                }}
+            }}
+            """
+        r = requests.post(self.OTP_ENDPOINT, json={"query": q})
+        itineraries = json.loads(r.text)["data"]["plan"]["itineraries"]
+        leg_data = {
+            "from_id": [],
+            "to_id": [],
+            "option": [],
+            "segment": [],
+            "mode": [],
+            "departure_time": [],
+            "feed": [],
+            "agency_id": [],
+            "route_id": [],
+            "start_stop_id": [],
+            "end_stop_id": [],
+        }
+        option_data = {"option": [], "startTime": [], "endTime": []}
+        for idx, itinerary in enumerate(itineraries):
+            option_data["option"].append(idx)
+            option_data["startTime"].append(itinerary["startTime"])
+            option_data["endTime"].append(itinerary["endTime"])
+            for lidx, leg in enumerate(itinerary["legs"]):
+                leg_data["from_id"].append(from_id)
+                leg_data["to_id"].append(to_id)
+                leg_data["option"].append(idx)
+                leg_data["segment"].append(lidx)
+                leg_data["mode"].append(leg["mode"])
+                departure_time = datetime.datetime.fromtimestamp(
+                    leg["from"]["departureTime"] / 1000, timezone("America/New_York")
+                )
+                leg_data["departure_time"].append(departure_time)
+                if leg["from"]["stop"] != None:
+                    leg_data["start_stop_id"].append(
+                        leg["from"]["stop"]["gtfsId"].split(":")[1]
+                    )
+                else:
+                    leg_data["start_stop_id"].append(None)
+                if leg["to"]["stop"] != None:
+                    leg_data["end_stop_id"].append(
+                        leg["to"]["stop"]["gtfsId"].split(":")[1]
+                    )
+                else:
+                    leg_data["end_stop_id"].append(None)
+                if leg["route"] != None:
+                    leg_data["route_id"].append(leg["route"]["gtfsId"].split(":")[1])
+                    leg_data["agency_id"].append(
+                        leg["route"]["agency"]["gtfsId"].split(":")[1]
+                    )
+                    leg_data["feed"].append(
+                        self.feeds[str(leg["route"]["agency"]["gtfsId"].split(":")[0])]
+                    )
+                else:
+                    leg_data["route_id"].append(None)
+                    leg_data["agency_id"].append(None)
+                    leg_data["feed"].append(None)
+        leg_df = pandas.DataFrame(leg_data)
+        options_df = pandas.DataFrame(option_data)
+        options_df["delta"] = (options_df.endTime - options_df.startTime) / 60000
+        try:
+            option = options_df.sort_values("delta").iloc[0].option.astype(int)
+            return leg_df[leg_df["option"] == option].drop(columns=["option"])
+        except IndexError:
+            return leg_df
+
+
+def _route_query(param_list):
+    otp = param_list[0]
+    return otp.query_route(
+        from_id=param_list[1],
+        to_id=param_list[2],
+        from_lat=param_list[3],
+        from_lon=param_list[4],
+        to_lat=param_list[5],
+        to_lon=param_list[6],
+        start_datetime=param_list[7],
+    )
+
+
+def _chunkify(l: list, n: int):
+    """Divide a list into chunks of size n
+    Parameters
+    ----------
+    l : list
+        The list to chunkify
+    n : int
+        The maximum chunk size
+    """
+    for i in range(0, len(l), n):
+        yield l[i : i + n]
+
+
+def run_otp_itineraries_in_parallel(fares_yaml, points, output_folder, chunk_size=30):
+    with open(fares_yaml) as infile:
+        config = yaml.safe_load(infile)
+
+    feeds = {
+        (str(key) if isinstance(key, int) else key): config["feeds"][key]
+        for key in config["feeds"]
+    }
+
+    otp = OTPQuery(feeds)
+    dfs = []
+    params_list = []
+    for odx, origin in points.iterrows():
+        for ddx, dest in points.iterrows():
+            if origin.cluster_id != dest.cluster_id:
+                params_list.append(
+                    [
+                        otp,
+                        origin.cluster_id,
+                        dest.cluster_id,
+                        origin.MEAN_Y,
+                        origin.MEAN_X,
+                        dest.MEAN_Y,
+                        dest.MEAN_X,
+                        datetime.datetime(2023, 9, 27, 7, 11),
+                    ]
+                )
+    print("Generating", len(params_list), "itineraries")
+    chunk_list = list(_chunkify(params_list, chunk_size))
+    print(f"Using chunks of size {chunk_size}")
+    cpus = multiprocessing.cpu_count() - 2
+    print(f"Using {cpus} CPUs")
+
+    start = time.time()
+    with multiprocessing.Pool(cpus) as p:
+        for idx, chunk in tqdm(enumerate(chunk_list), total=len(chunk_list)):
+            df_list = p.map(_route_query, chunk)
+            df_list = [d for d in df_list if not d.empty]
+            if len(df_list) > 0:
+                pandas.concat(df_list, axis="index").to_csv(
+                    f"{output_folder}/WAS_{idx}.csv", index=False
+                )
+            else:
+                print("Chunk", idx, "has no data")
+
+    end = time.time()
+    print("Took", end - start, "seconds")
