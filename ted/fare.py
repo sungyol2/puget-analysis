@@ -23,7 +23,7 @@ logging.basicConfig(format="%(levelname)s: %(message)s", level=logging.INFO)
 
 INFINITE_INT = 100000
 MAX_FARE_TRAVEL_TIME = 180
-WALK_MODE = "TransportMode.WALK"
+WALK_MODE = "WALK"
 DB = "/home/willem/Documents/Project/TED/data/region/WAS/fare/WAS.db"
 
 TRANSFER_DISCOUNT = "transfer-discount"
@@ -164,12 +164,15 @@ class ItineraryCollection:
 
 
 class Itinerary:
-    def __init__(self, itinerary_df: pandas.DataFrame, region: str):
+    def __init__(
+        self, itinerary_df: pandas.DataFrame, region: str, verbose: bool = False
+    ):
         self._df = itinerary_df.sort_values("segment")
         self.region = region
         self._df.departure_time = pandas.to_datetime(self._df.departure_time)
         self._legs = []
         self._fares = []
+        self.verbose = verbose
 
     def clean(self):
         # Check that the first row is "walking"
@@ -297,7 +300,8 @@ class Itinerary:
         for fare in self._fares:
             elapsed = (current_time - fare.start_time).total_seconds()
             if elapsed > fare.max_time and fare.active == True:
-                print("Fare time exceeded for", fare)
+                if self.verbose == True:
+                    print("Fare time exceeded for", fare)
                 fare.active = False
 
     def update_existing_fare(
@@ -539,11 +543,24 @@ class ZoneFare(BaseFare):
         SELECT zf.fare_cost
         FROM zone_fare zf 
         WHERE mdb_slug = '{self.feed}' 
-        AND route_id = '{self.route_id}'
+        AND (route_id = '{self.route_id}' OR route_id = '__ANY__')
         AND from_zone = '{self.from_zone}'
         AND to_zone = '{self.to_zone}'"""
-        res = execute_sql(sql)[0][0]
-        self.cost = int(res)
+        res = execute_sql(sql)
+        if len(res) == 0:
+            # Try the reverse
+            sql = f"""
+                    SELECT zf.fare_cost
+                    FROM zone_fare zf 
+                    WHERE mdb_slug = '{self.feed}' 
+                    AND (route_id = '{self.route_id}' OR route_id = '__ANY__')
+                    AND from_zone = '{self.to_zone}'
+                    AND to_zone = '{self.from_zone}'"""
+            res = execute_sql(sql)
+        if len(res) > 0:
+            self.cost = int(res[0][0])
+        else:
+            self.cost = 500
 
 
 class OTPQuery:

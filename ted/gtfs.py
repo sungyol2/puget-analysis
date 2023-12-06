@@ -9,6 +9,7 @@ import json
 import os
 import requests
 import urllib
+import shutil
 import zipfile
 
 import geopandas
@@ -262,7 +263,7 @@ def remove_premium_routes_from_gtfs(
                         copy = GTFS.load_zip(curr_zip_dir)
                         if not os.path.exists(dated_output_path):
                             os.mkdir(dated_output_path)
-                        copy.write_zip(os.path.join(dated_output_path, curr_zip_entry))
+                        shutil.copy(curr_zip_dir, os.path.join(dated_output_path, curr_zip_entry))
                 except zipfile.BadZipFile:
                     print(curr_zip_entry, "is not a zipfile, skipping...")
 
@@ -272,8 +273,17 @@ def remove_premium_routes_from_gtfs(
     print(f"Done removing premium routes from {gtfs_folder}!")
 
 
+def remove_nonzip_files(gtfs_folder):
+    for folder in os.listdir(gtfs_folder):
+        for file in os.listdir(os.path.join(gtfs_folder, folder)):
+            if not file.endswith(".zip"):
+                print("Removing", file)
+                os.remove(os.path.join(gtfs_folder, folder, file))
+
+
 def check_valid_dates(gtfs_folder: str, week_of_deltas: list[int]):
     """Check a gtfs feeds to see if dates are covered by the feed, assumes the mondays are
+    the base starting point
 
     Parameters
     ----------
@@ -469,6 +479,22 @@ def summarize_gtfs_data(gtfs_folder, date: datetime.date) -> pandas.DataFrame:
 def match_with_mobility_database(
     gtfs_folder, custom_mdb_path=None, exising_mapping: pandas.DataFrame = None
 ) -> pandas.DataFrame:
+    """Match GTFS files with slugs from the mobility database
+
+    Parameters
+    ----------
+    gtfs_folder : str
+        The folder containing the GTFS files
+    custom_mdb_path : str, optional
+        A path to a specific mobility database file. If none, a new one is fetched. by default None
+    exising_mapping : pandas.DataFrame, optional
+        A dataframe containing existing file mappings, by default None
+
+    Returns
+    -------
+    pandas.DataFrame
+        A mapping dataframe that can be saved and used on the next iteration
+    """
     if custom_mdb_path is None:
         mdb = fetch_mobility_database()
     else:
@@ -579,6 +605,16 @@ def compute_transit_service_intensity(
             # Somehow handle frequency-level information
         except zipfile.BadZipFile:
             print(filename, "is not a valid zipfile, skipping...")
+
+
+def rename_ted1_gtfs_folders(gtfs_folder: str):
+    for folder in os.listdir(gtfs_folder):
+        date = datetime.datetime.strptime(folder.split("_")[1], "%Y-%m-%d")
+        date = date + datetime.timedelta(days=1)
+        os.rename(
+            os.path.join(gtfs_folder, folder),
+            os.path.join(gtfs_folder, date.strftime("%Y-%m-%d")),
+        )
 
 
 class TransitLand:
