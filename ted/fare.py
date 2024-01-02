@@ -1,4 +1,5 @@
 import datetime
+import itertools
 import json
 import logging
 import multiprocessing
@@ -7,7 +8,7 @@ import requests
 from pytz import timezone
 import time
 
-import geopandas as gpd
+import geopandas
 import numpy
 import pandas
 from tqdm import tqdm
@@ -24,9 +25,30 @@ logging.basicConfig(format="%(levelname)s: %(message)s", level=logging.INFO)
 INFINITE_INT = 100000
 MAX_FARE_TRAVEL_TIME = 180
 WALK_MODE = "WALK"
-DB = "/home/willem/Documents/Project/TED/data/region/WAS/fare/WAS.db"
 
 TRANSFER_DISCOUNT = "transfer-discount"
+
+
+def compute_wmata_2020_fare(miles):
+    """Based on formula provided by WMATA
+
+    Parameters
+    ----------
+    miles : float
+        Composite miles travelled
+
+    Returns
+    -------
+    int
+        Fare amount
+    """
+    if miles < 3:
+        fare = 225
+    elif miles <= 6:
+        fare = 225 + (miles - 3) * 32.6
+    else:
+        fare = 225 + 3 * 32.6 + (miles - 6) * 28.8
+    return min(int(round(fare)), 600)
 
 
 class ItinerariesGenerator:
@@ -58,7 +80,7 @@ class ItinerariesGenerator:
 
     def generate_itineraries(self, sample=0):
         print("Initializing itinerary generation")
-        centroids = gpd.read_file(self.gpkg, layer=self.centroids_layer)
+        centroids = geopandas.read_file(self.gpkg, layer=self.centroids_layer)
         centroids = centroids.rename(columns={"TR20": "id"})
         if sample > 0:
             centroids = centroids.sample(sample).copy()
@@ -163,9 +185,53 @@ class ItineraryCollection:
         return len(self._itineraries)
 
 
+def add_gtfs_tag_to_zipfiles(folder):
+    for f in os.listdir(folder):
+        if f.endswith(".zip"):
+            os.rename(os.path.join(folder, f), os.path.join(folder, f"gtfs-{f}"))
+
+
+def run_r5_on_clusters(
+    clusters: geopandas.GeoDataFrame,
+    gtfs_folder: str,
+    osm_file: str,
+    departure: datetime,
+    output_file,
+):
+    print("-> Running R5py on clusters <-")
+    print("  GTFS Folder:", gtfs_folder)
+    print("  OSM File:", osm_file)
+    print("  Departure:", departure)
+    print()
+    clusters.rename(columns={"CLUSTER_ID": "id"}, inplace=True)
+    # Read in the GTFS set
+    gtfs_files = []
+    for filename in os.listdir(gtfs_folder):
+        gtfs_files.append(os.path.join(gtfs_folder, filename))
+
+    # Build the full network
+    print("  Building network")
+    network = r5py.TransportNetwork(osm_pbf=osm_file, gtfs=gtfs_files)
+    computer = r5py.TravelTimeMatrixComputer(
+        network,
+        origins=clusters,
+        destinations=clusters,
+        departure=departure,
+        departure_time_window=datetime.timedelta(minutes=120),
+        max_time=datetime.timedelta(minutes=180),
+        transport_modes=["WALK", "TRANSIT"],
+    )
+    print("  Computing Travel Times")
+    # Actually compute the travel times
+    mx = computer.compute_travel_times()
+    mx = mx.dropna(subset="travel_time")
+    # Dump it into a folder
+    mx[["from_id", "to_id"]].to_csv(output_file, index=False)
+
+
 class Itinerary:
     def __init__(
-        self, itinerary_df: pandas.DataFrame, region: str, verbose: bool = False
+        self, itinerary_df: pandas.DataFrame, region: str, db, verbose: bool = False
     ):
         self._df = itinerary_df.sort_values("segment")
         self.region = region
@@ -173,6 +239,7 @@ class Itinerary:
         self._legs = []
         self._fares = []
         self.verbose = verbose
+        self.db = db
 
     def clean(self):
         # Check that the first row is "walking"
@@ -185,7 +252,7 @@ class Itinerary:
         prev_leg = None
         for idx, row in self._df.iterrows():
             if row["transport_mode"] != WALK_MODE:
-                this_leg = TransitLeg.from_row(row, prev_leg)
+                this_leg = TransitLeg.from_row(row, prev_leg, self.db)
                 self._legs.append(this_leg)
                 prev_leg = this_leg
 
@@ -223,31 +290,35 @@ class Itinerary:
             to_leg = leg.next_leg
             current_time = to_leg.departure_time
 
-            # Let's go ahead and update all fares
+            # Let's go ahead and update all fare clocks
             self.update_fare_times(current_time)
 
             # Let's find out if the next leg is already covered by the existing fares
             df = from_leg.transfers[from_leg.transfers.to_mdb_slug == to_leg.feed]
-            # Keep only those with all routes or specified stops
-            df = df[
-                (
-                    (df.from_route_id == from_leg.route_id)
-                    | (df.from_route_id == "__ANY__")
-                )
-                & ((df.to_route_id == to_leg.route_id) | (df.to_route_id == "__ANY__"))
-            ]
-            df = df[
-                (
-                    (df.from_stop_id == from_leg.end_stop_id)
-                    | (df.from_stop_id == "__ANY__")
-                )
-                & (
-                    (df.to_stop_id == to_leg.start_stop_id)
-                    | (df.to_stop_id == "__ANY__")
-                )
-            ]
-            if df.shape[0] > 0:
-                tfr = df.iloc[0]
+
+            # Now we need to filter out rules specifically
+            # First we check for an __ANY__ condition as that covers all routes
+            from_df = df[df.from_route_id == "__ANY__"]
+            if from_df.shape[0] == 0:
+                # Next, we check for a specific route ID
+                from_df = df[df.from_route_id == from_leg.route_id]
+
+                if from_df.shape[0] == 0:
+                    # Finally, we check for an __ELSE__ key
+                    from_df = df[df.from_route_id == "__ELSE__"]
+
+            # Now we check for the route we are transferring to
+            to_df = from_df[from_df.to_route_id == "__ANY__"]
+            if to_df.shape[0] == 0:
+                # Next, we check for a specific route ID
+                to_df = from_df[from_df.from_route_id == from_leg.route_id]
+                if to_df.shape[0] == 0:
+                    # Finally, we check for an __ELSE__ key
+                    to_df = from_df[from_df.from_route_id == "__ELSE__"]
+
+            if to_df.shape[0] > 0:
+                # We have some kind of rule, let's apply the first one we find (should just be one)
+                tfr = to_df.iloc[0]
                 # For a transfer discount, we want to apply it
                 if tfr.transfer_type == "transfer-discount":
                     # Let's apply a discount to the next route's fare
@@ -324,10 +395,10 @@ class Itinerary:
         FROM fare_type
         WHERE fare_type.mdb_slug = "{leg.feed}"
         """
-        res = execute_sql(sql)[0]
+        res = execute_sql(sql, self.db)[0]
 
         if res[0] == "flat":
-            fare = FixedFare(leg.departure_time, res[1], res[2], leg.feed)
+            fare = FixedFare(leg.departure_time, res[1], res[2], leg.feed, self.db)
             rf = self.get_route_fare_cost(leg)
             if rf is not None:
                 fare.cost = rf
@@ -343,6 +414,7 @@ class Itinerary:
                 max_transfers=res[1],
                 max_time=res[2],
                 feed=leg.feed,
+                db=self.db,
                 route_id=leg.route_id,
                 from_zone=start_zone,
                 to_zone=end_zone,
@@ -358,7 +430,7 @@ class Itinerary:
         where "zone".mdb_slug = '{leg.feed}'
         and "zone".stop_id = '{leg.start_stop_id}'
         """
-        start_zone = execute_sql(sql)[0][0]
+        start_zone = execute_sql(sql, self.db)[0][0]
 
         sql = f"""
         SELECT zone_id
@@ -366,7 +438,7 @@ class Itinerary:
         where "zone".mdb_slug = '{leg.feed}'
         and "zone".stop_id = '{leg.end_stop_id}'
         """
-        end_zone = execute_sql(sql)[0][0]
+        end_zone = execute_sql(sql, self.db)[0][0]
 
         return start_zone, end_zone
 
@@ -389,7 +461,7 @@ class Itinerary:
         where rf.mdb_slug = '{leg.feed}'
         AND rf.route_id = '{leg.route_id}'
         """
-        res = execute_sql(sql)
+        res = execute_sql(sql, self.db)
         if len(res) > 0:
             return int(res[0][0])
         else:
@@ -415,11 +487,11 @@ class Itinerary:
         where ff.mdb_slug = "{leg.feed}"
         """
 
-        return int(execute_sql(sql)[0][0])
+        return int(execute_sql(sql, self.db)[0][0])
 
 
-def execute_sql(sql) -> list:
-    conn = sqlite3.connect(DB)
+def execute_sql(sql, db) -> list:
+    conn = sqlite3.connect(db)
     cursor = conn.cursor()
     cursor.execute(sql)
     res = cursor.fetchall()
@@ -427,8 +499,8 @@ def execute_sql(sql) -> list:
     return res
 
 
-def execute_sql_to_df(sql) -> pandas.DataFrame:
-    conn = sqlite3.connect(DB)
+def execute_sql_to_df(sql, db) -> pandas.DataFrame:
+    conn = sqlite3.connect(db)
     df = pandas.read_sql_query(sql, conn)
     return df
 
@@ -445,6 +517,7 @@ class TransitLeg:
         end_stop_id,
         prev_leg,
         next_leg,
+        db,
     ):
         self.transport_mode = transport_mode
         self.departure_time = departure_time
@@ -455,19 +528,20 @@ class TransitLeg:
         self.end_stop_id = end_stop_id
         self.prev_leg = prev_leg
         self.next_leg = next_leg
+        self.db = db
 
         # Let's get the transfers
         sql = f"""
         SELECT * from transfer
         where transfer.from_mdb_slug = '{self.feed}'
         """
-        self.transfers = execute_sql_to_df(sql)
+        self.transfers = execute_sql_to_df(sql, self.db)
 
     def __repr__(self) -> str:
         return f"<TransitLeg {self.transport_mode} {self.departure_time} | {self.route_id}:{self.start_stop_id}->{self.end_stop_id}>"
 
     @classmethod
-    def from_row(cls, r, prev_leg):
+    def from_row(cls, r, prev_leg, db):
         leg = cls(
             r.transport_mode,
             r.departure_time.to_pydatetime(),
@@ -478,6 +552,7 @@ class TransitLeg:
             r.end_stop_id,
             prev_leg,
             None,
+            db,
         )
         # Link the list
         if prev_leg is not None:
@@ -487,13 +562,14 @@ class TransitLeg:
 
 
 class BaseFare:
-    def __init__(self, start_time, transfers, duration, feed):
+    def __init__(self, start_time, transfers, duration, feed, db):
         self.start_time = start_time
         self.active = True
         self.cost = None
         self.premium = None
         self.discount = 0
         self.feed = feed
+        self.db = db
 
         if duration > 0:
             self.max_time = duration
@@ -516,8 +592,8 @@ class BaseFare:
 
 
 class FixedFare(BaseFare):
-    def __init__(self, start_time, max_transfers, max_time, feed):
-        super().__init__(start_time, max_transfers, max_time, feed)
+    def __init__(self, start_time, max_transfers, max_time, feed, db):
+        super().__init__(start_time, max_transfers, max_time, feed, db)
 
     def __repr__(self) -> str:
         active = ["X", "A"][int(self.active)]
@@ -526,9 +602,17 @@ class FixedFare(BaseFare):
 
 class ZoneFare(BaseFare):
     def __init__(
-        self, start_time, max_transfers, max_time, feed, route_id, from_zone, to_zone
+        self,
+        start_time,
+        max_transfers,
+        max_time,
+        feed,
+        db,
+        route_id,
+        from_zone,
+        to_zone,
     ):
-        super().__init__(start_time, max_transfers, max_time, feed)
+        super().__init__(start_time, max_transfers, max_time, feed, db)
         self.route_id = route_id
         self.from_zone = from_zone
         self.to_zone = to_zone
@@ -546,7 +630,7 @@ class ZoneFare(BaseFare):
         AND (route_id = '{self.route_id}' OR route_id = '__ANY__')
         AND from_zone = '{self.from_zone}'
         AND to_zone = '{self.to_zone}'"""
-        res = execute_sql(sql)
+        res = execute_sql(sql, self.db)
         if len(res) == 0:
             # Try the reverse
             sql = f"""
@@ -556,7 +640,7 @@ class ZoneFare(BaseFare):
                     AND (route_id = '{self.route_id}' OR route_id = '__ANY__')
                     AND from_zone = '{self.to_zone}'
                     AND to_zone = '{self.from_zone}'"""
-            res = execute_sql(sql)
+            res = execute_sql(sql, self.db)
         if len(res) > 0:
             self.cost = int(res[0][0])
         else:
@@ -702,6 +786,71 @@ def _route_query(param_list):
     )
 
 
+def map_fare_matrix_to_bg(
+    fare_matrix_filepath: str,
+    cluster_to_bg: str,
+    gpkg: str,
+    output_parquet: str,
+    infinite_fare=9999,
+):
+    print("Mapping fare matrix to block groups")
+    all_bgs = geopandas.read_file(gpkg, layer="bg_centroids")
+    all_bgs = all_bgs["BG20"].tolist()
+    all_bgs = list(itertools.product(all_bgs, all_bgs))
+    all_bgs = pandas.DataFrame(
+        all_bgs,
+        columns=["BG20_from", "BG20_to"],
+    )
+
+    if fare_matrix_filepath.endswith(".csv"):
+        fmx = pandas.read_csv(fare_matrix_filepath)
+    else:
+        fmx = pandas.read_parquet(fare_matrix_filepath)
+    c2bg = pandas.read_csv(cluster_to_bg, dtype={"BG20": str})
+    df = pandas.merge(fmx, c2bg, left_on="from_id", right_on="CLUSTER_ID", how="left")
+    df = pandas.merge(
+        df,
+        c2bg,
+        left_on="to_id",
+        right_on="CLUSTER_ID",
+        how="left",
+        suffixes=["_from", "_to"],
+    )
+    df = df[["BG20_from", "BG20_to", "fare_cost"]]
+    df = pandas.merge(all_bgs, df, on=["BG20_from", "BG20_to"], how="left")
+    df["fare_cost"] = df["fare_cost"].fillna(infinite_fare)
+
+    df.to_parquet(output_parquet)
+
+
+def make_fare_matrix_from_itineraries(
+    itineraries_parquet, matrix_parquet, fares_db, region_key
+):
+    df = pandas.read_parquet(itineraries_parquet).rename(
+        columns={"mode": "transport_mode"}
+    )
+    pairs = df.drop_duplicates(subset=["from_id", "to_id"])
+    fares = {"from_id": [], "to_id": [], "fare_cost": []}
+    for idx, pair in tqdm(pairs.iterrows(), total=pairs.shape[0]):
+        sub_df = df[
+            (df.from_id == pair["from_id"]) & (df.to_id == pair["to_id"])
+        ].copy()
+        if sub_df.shape[0] > 1:
+            it = Itinerary(
+                sub_df,
+                region_key,
+                fares_db,
+            )
+            it.clean()
+            it.make_legs()
+            fares["from_id"].append(pair["from_id"])
+            fares["to_id"].append(pair["to_id"])
+            fares["fare_cost"].append(it.compute_fare())
+
+        fare_df = pandas.DataFrame(fares)
+        fare_df.to_parquet(matrix_parquet)
+
+
 def _chunkify(l: list, n: int):
     """Divide a list into chunks of size n
     Parameters
@@ -713,6 +862,124 @@ def _chunkify(l: list, n: int):
     """
     for i in range(0, len(l), n):
         yield l[i : i + n]
+
+
+def dechunkify(chunk_folder: str, parquet_output: str):
+    print("Dechunkifying")
+    dfs = []
+    for f in os.listdir(chunk_folder):
+        dfs.append(
+            pandas.read_csv(
+                os.path.join(chunk_folder, f),
+                dtype={
+                    "from_id": int,
+                    "to_id": int,
+                    "route_id": str,
+                    "stop_id": str,
+                    "feed": str,
+                    "start_stop_id": str,
+                    "end_stop_id": str,
+                },
+            )
+        )
+
+    df = pandas.concat(dfs, axis="index")
+    df["agency_id"] = df["agency_id"].astype(str)
+    df.to_parquet(parquet_output)
+
+
+def run_otp_itineraries_from_pairs_list(
+    fares_yaml: str,
+    pairs_df: pandas.DataFrame,
+    clusters: pandas.DataFrame,
+    departure: datetime.datetime,
+    output_folder: str,
+    region_key: str,
+    chunk_size=30,
+):
+    """Fetch a set of OTP itineraries based on a provided set of origin-destination pairs
+
+    Parameters
+    ----------
+    fares_yaml : str
+        The file path of the fares configuration YAML file
+    pairs_df : pandas.DataFrame
+        The dataframe with the pairs to check
+    clusters : pandas.DataFrame
+        The set of clusters to create itineraries for
+    departure : datetime.datetime
+        The departure time and date to use
+    output_folder : str
+        The folder in which to put the chunks that are created
+    region_key : str
+        The region key string (e.g. WAS)
+    chunk_size : int, optional
+        The size of chunk to use (number of pairs), by default 30
+    """
+    print("Running OTP Itineraries - Specified Pairs")
+    with open(fares_yaml) as infile:
+        config = yaml.safe_load(infile)
+
+    feeds = {
+        (str(key) if isinstance(key, int) else key): config["feeds"][key]
+        for key in config["feeds"]
+    }
+
+    otp = OTPQuery(feeds)
+    dfs = []
+    params_list = []
+    print("  Building job list")
+
+    # Remove diagnonals
+    pairs_df = pairs_df[pairs_df.from_id != pairs_df.to_id]
+    pairs_df = pandas.merge(
+        pairs_df,
+        clusters,
+        left_on="from_id",
+        right_on="CLUSTER_ID",
+        how="left",
+    )
+    pairs_df = pandas.merge(
+        pairs_df,
+        clusters,
+        left_on="to_id",
+        right_on="CLUSTER_ID",
+        how="left",
+        suffixes=["_o", "_d"],
+    )
+    for idx, pair in pairs_df.iterrows():
+        params_list.append(
+            [
+                otp,
+                pair.CLUSTER_ID_o,
+                pair.CLUSTER_ID_d,
+                pair.MEAN_Y_o,
+                pair.MEAN_X_o,
+                pair.MEAN_Y_d,
+                pair.MEAN_X_d,
+                departure,
+            ]
+        )
+    print("  Generating", len(params_list), "itineraries")
+    chunk_list = list(_chunkify(params_list, chunk_size))
+    print(f"  Using chunks of size {chunk_size}")
+    cpus = multiprocessing.cpu_count() - 2
+    print(f"  Using {cpus} CPUs")
+
+    start = time.time()
+    with multiprocessing.Pool(cpus) as p:
+        for idx, chunk in tqdm(enumerate(chunk_list), total=len(chunk_list)):
+            df_list = p.map(_route_query, chunk)
+            df_list = [d for d in df_list if not d.empty]
+            if len(df_list) > 0:
+                pandas.concat(df_list, axis="index").to_csv(
+                    f"{output_folder}/{region_key}_{idx}.csv", index=False
+                )
+            else:
+                print("    Chunk", idx, "has no data")
+
+    end = time.time()
+    print("  Took", end - start, "seconds")
 
 
 def run_otp_itineraries_in_parallel(fares_yaml, points, output_folder, chunk_size=30):

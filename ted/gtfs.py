@@ -394,7 +394,7 @@ def extend_calendar_dates(gtfs_folder, output_folder, days_ahead_to_extend):
                     print("    Want to extend minimum, no calendar file")
             if max_feed_date < max_date:
                 if gtfs.calendar is not None:
-                    gtfs.calendar["end_date"] = min_date.strftime("%Y%m%d")
+                    gtfs.calendar["end_date"] = max_date.strftime("%Y%m%d")
                     print("    Extended", feed, "end date")
                 else:
                     print("    Want to extend maximum, no calendar file")

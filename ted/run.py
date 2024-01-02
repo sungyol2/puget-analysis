@@ -202,6 +202,14 @@ class Run:
                     ).data
                     c60.columns = ["C000_c60"]
 
+                    print(f"    {run_key}: Computing c90 measures")
+                    c90 = ac.cumulative_cutoff(
+                        cost_columns=["travel_time"],
+                        cutoffs=[90],
+                        supply_columns=["C000"],
+                    ).data
+                    c90.columns = ["C000_c90"]
+
                     print(f"    {run_key}: Computing t1 measures")
                     t1 = ac.cost_to_closest(
                         "travel_time",
@@ -211,6 +219,7 @@ class Run:
                             "hospitals",
                             "pharmacies",
                             "urgent_care_facilities",
+                            "early_voting",
                         ],
                         n=1,
                     ).data
@@ -230,17 +239,158 @@ class Run:
                     ).data
                     t3.columns = {f"{c}_t3" for c in t3.columns}
 
+                    # Now we need fare constrained
+
+                    # Fare constrained analysis
+                    # Need to load in some fare matrices
+                    fare_threshold = region_config["fare_threshold"]
+                    fare_config = region_config["fare"]
+                    print(f"    {run_key}: Computing fare measures")
+                    years_dfs = []
+                    for year in fare_config:
+                        year_config = fare_config[year]
+                        # Read in the matrices
+                        full_fmx = pandas.read_parquet(year_config["full"])
+                        lim_fmx = pandas.read_parquet(year_config["limited"])
+                        full_fmx.columns = ["from_id", "to_id", "fare_cost"]
+                        lim_fmx.columns = ["from_id", "to_id", "fare_cost"]
+
+                        full_mx = pandas.read_parquet(
+                            os.path.join(run_folder, "full_matrix.parquet")
+                        )
+                        lim_mx = pandas.read_parquet(
+                            os.path.join(run_folder, "limited_matrix.parquet")
+                        )
+
+                        # Merge the fare matrix and the travel time matrices
+                        full_mx = pandas.merge(
+                            full_mx, full_fmx, on=["from_id", "to_id"]
+                        )
+                        lim_mx = pandas.merge(lim_mx, lim_fmx, on=["from_id", "to_id"])
+
+                        full_fare_cost = traccess.Cost(full_mx)
+                        lim_fare_cost = traccess.Cost(lim_mx)
+
+                        full_ac = traccess.AccessComputer(supply, full_fare_cost)
+                        lim_ac = traccess.AccessComputer(supply, lim_fare_cost)
+
+                        print(f"      {run_key} ({year}): Computing c15f measures")
+                        c15f_full = full_ac.cumulative_cutoff(
+                            ["travel_time", "fare_cost"],
+                            [15, fare_threshold],
+                            supply_columns=["acres"],
+                        ).data
+                        c15f_lim = lim_ac.cumulative_cutoff(
+                            ["travel_time", "fare_cost"],
+                            [15, fare_threshold],
+                            supply_columns=["acres"],
+                        ).data
+
+                        c15f = c15f_full.join(c15f_lim, lsuffix="_full", rsuffix="_lim")
+                        c15f[f"acres_c15f_{year}"] = c15f[
+                            ["acres_full", "acres_lim"]
+                        ].max(axis=1)
+                        c15f = c15f[[f"acres_c15f_{year}"]]
+
+                        years_dfs.append(c15f)
+
+                        print(f"      {run_key} ({year}): Computing c30f measures")
+                        c30f_full = full_ac.cumulative_cutoff(
+                            ["travel_time", "fare_cost"],
+                            [30, fare_threshold],
+                            supply_columns=["C000", "acres"],
+                        ).data
+                        c30f_lim = lim_ac.cumulative_cutoff(
+                            ["travel_time", "fare_cost"],
+                            [30, fare_threshold],
+                            supply_columns=["C000", "acres"],
+                        ).data
+
+                        c30f = c30f_full.join(c30f_lim, lsuffix="_full", rsuffix="_lim")
+                        c30f[f"C000_c30f_{year}"] = c30f[["C000_full", "C000_lim"]].max(
+                            axis=1
+                        )
+                        c30f[f"acres_c30f_{year}"] = c30f[
+                            ["acres_full", "acres_lim"]
+                        ].max(axis=1)
+                        c30f = c30f[[f"C000_c30f_{year}", f"acres_c30f_{year}"]]
+
+                        years_dfs.append(c30f)
+
+                        print(f"      {run_key} ({year}): Computing c45f measures")
+                        c45f_full = full_ac.cumulative_cutoff(
+                            ["travel_time", "fare_cost"],
+                            [45, fare_threshold],
+                            supply_columns=["C000"],
+                        ).data
+                        c45f_lim = lim_ac.cumulative_cutoff(
+                            ["travel_time", "fare_cost"],
+                            [45, fare_threshold],
+                            supply_columns=["C000"],
+                        ).data
+
+                        c45f = c45f_full.join(c45f_lim, lsuffix="_full", rsuffix="_lim")
+                        c45f[f"C000_c45f_{year}"] = c45f[["C000_full", "C000_lim"]].max(
+                            axis=1
+                        )
+                        c45f = c45f[[f"C000_c45f_{year}"]]
+
+                        years_dfs.append(c45f)
+
+                        print(f"      {run_key} ({year}): Computing c60f measures")
+                        c60f_full = full_ac.cumulative_cutoff(
+                            ["travel_time", "fare_cost"],
+                            [60, fare_threshold],
+                            supply_columns=["C000"],
+                        ).data
+                        c60f_lim = lim_ac.cumulative_cutoff(
+                            ["travel_time", "fare_cost"],
+                            [60, fare_threshold],
+                            supply_columns=["C000"],
+                        ).data
+
+                        c60f = c60f_full.join(c60f_lim, lsuffix="_full", rsuffix="_lim")
+                        c60f[f"C000_c60f_{year}"] = c60f[["C000_full", "C000_lim"]].max(
+                            axis=1
+                        )
+                        c60f = c60f[[f"C000_c60f_{year}"]]
+
+                        years_dfs.append(c60f)
+
+                        print(f"      {run_key} ({year}): Computing c90f measures")
+                        c90f_full = full_ac.cumulative_cutoff(
+                            ["travel_time", "fare_cost"],
+                            [90, fare_threshold],
+                            supply_columns=["C000"],
+                        ).data
+                        c90f_lim = lim_ac.cumulative_cutoff(
+                            ["travel_time", "fare_cost"],
+                            [90, fare_threshold],
+                            supply_columns=["C000"],
+                        ).data
+
+                        c90f = c90f_full.join(c90f_lim, lsuffix="_full", rsuffix="_lim")
+                        c90f[f"C000_c90f_{year}"] = c90f[["C000_full", "C000_lim"]].max(
+                            axis=1
+                        )
+                        c90f = c90f[[f"C000_c90f_{year}"]]
+
+                        years_dfs.append(c90f)
+
                     df = c15.join(c30)
                     df = df.join(c45)
                     df = df.join(c60)
                     df = df.join(t1)
                     df = df.join(t3)
+                    for frame in years_dfs:
+                        df = df.join(frame)
                     df = df.reset_index().rename(columns={"from_id": "BG20"})
+                    print("Saving access output to", run_folder)
                     df.to_csv(os.path.join(run_folder, "access.csv"), index=False)
 
             if region["equity"]:
                 # Compute equity summaries
-                pass
+                raise NotImplementedError
 
     def run_matrix(
         self, region, centroids, gtfs_folder, region_folder, runs, output_name
