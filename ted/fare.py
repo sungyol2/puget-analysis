@@ -191,6 +191,13 @@ def add_gtfs_tag_to_zipfiles(folder):
             os.rename(os.path.join(folder, f), os.path.join(folder, f"gtfs-{f}"))
 
 
+def get_unique_routes_used(itinerary_parquet_file, output_file):
+    df = pandas.read_parquet(itinerary_parquet_file)[["feed", "route_id"]]
+    df = df[~df.feed.isna()]
+    df = df.drop_duplicates()
+    df.to_csv(output_file, index=False)
+
+
 def run_r5_on_clusters(
     clusters: geopandas.GeoDataFrame,
     gtfs_folder: str,
