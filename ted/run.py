@@ -1,4 +1,5 @@
 """Methods for setting up the data and folder structure for an analysis"""
+
 import os
 import datetime
 import shutil
@@ -162,6 +163,7 @@ class Run:
                 )
                 for run_key, run in region["runs"].items():
                     run_folder = os.path.join(region_folder, run_key)
+                    print(f"    {run_key}: Output folder is", run_folder)
                     # Let's do full matrix first
                     full_cost = traccess.Cost.from_parquet(
                         os.path.join(run_folder, "full_matrix.parquet"),
@@ -213,7 +215,7 @@ class Run:
                     print(f"    {run_key}: Computing t1 measures")
                     t1 = ac.cost_to_closest(
                         "travel_time",
-                        [
+                        supply_columns=[
                             "education",
                             "grocery",
                             "hospitals",
@@ -223,7 +225,7 @@ class Run:
                         ],
                         n=1,
                     ).data
-                    t1.columns = {f"{c}_t1" for c in t1.columns}
+                    t1.columns = [f"{c}_t1" for c in t1.columns]
 
                     print(f"    {run_key}: Computing t3 measures")
                     t3 = ac.cost_to_closest(
@@ -237,10 +239,9 @@ class Run:
                         ],
                         n=3,
                     ).data
-                    t3.columns = {f"{c}_t3" for c in t3.columns}
+                    t3.columns = [f"{c}_t3" for c in t3.columns]
 
                     # Now we need fare constrained
-
                     # Fare constrained analysis
                     # Need to load in some fare matrices
                     fare_threshold = region_config["fare_threshold"]
@@ -377,20 +378,148 @@ class Run:
 
                         years_dfs.append(c90f)
 
+                        del full_mx
+                        del lim_mx
+                        del full_fare_cost
+                        del lim_fare_cost
+
                     df = c15.join(c30)
                     df = df.join(c45)
                     df = df.join(c60)
+                    df = df.join(c90)
                     df = df.join(t1)
                     df = df.join(t3)
+
                     for frame in years_dfs:
                         df = df.join(frame)
+
                     df = df.reset_index().rename(columns={"from_id": "BG20"})
                     print("Saving access output to", run_folder)
-                    df.to_csv(os.path.join(run_folder, "access.csv"), index=False)
+                    df.to_csv(
+                        os.path.join(run_folder, "access_transit.csv"), index=False
+                    )
+
+                    del c30
+                    del c45
+                    del c60
+                    del c90
+                    del t1
+                    del d3
+                    del years_dfs
+
+                    # Now auto matrices
+
+                    auto_cost = traccess.Cost.from_parquet(
+                        os.path.join(region_config["auto"], f"{run_key}.parquet")
+                    )
+                    auto_ac = traccess.AccessComputer(supply, auto_cost)
+
+                    print(f"    {run_key}: Computing AUTO c15 measures")
+                    auto_c15 = auto_ac.cumulative_cutoff(
+                        cost_columns=["travel_time"],
+                        cutoffs=[15],
+                        supply_columns=["acres"],
+                    ).data
+                    auto_c15.columns = ["acres_c15_auto"]
+
+                    print(f"    {run_key}: Computing AUTO c30 measures")
+                    auto_c30 = auto_ac.cumulative_cutoff(
+                        cost_columns=["travel_time"],
+                        cutoffs=[30],
+                        supply_columns=["C000", "acres"],
+                    ).data
+                    auto_c30.columns = ["C000_c30_auto", "acres_c30_auto"]
+
+                    print(f"    {run_key}: Computing AUTO c45 measures")
+                    auto_c45 = auto_ac.cumulative_cutoff(
+                        cost_columns=["travel_time"],
+                        cutoffs=[45],
+                        supply_columns=["C000"],
+                    ).data
+                    auto_c45.columns = ["C000_c45_auto"]
+
+                    print(f"    {run_key}: Computing AUTO c60 measures")
+                    auto_c60 = auto_ac.cumulative_cutoff(
+                        cost_columns=["travel_time"],
+                        cutoffs=[60],
+                        supply_columns=["C000"],
+                    ).data
+                    auto_c60.columns = ["C000_c60_auto"]
+
+                    print(f"    {run_key}: Computing AUTO c90 measures")
+                    auto_c90 = auto_ac.cumulative_cutoff(
+                        cost_columns=["travel_time"],
+                        cutoffs=[90],
+                        supply_columns=["C000"],
+                    ).data
+                    auto_c90.columns = ["C000_c90_auto"]
+
+                    print(f"    {run_key}: Computing AUTO t1 measures")
+                    auto_t1 = auto_ac.cost_to_closest(
+                        "travel_time",
+                        [
+                            "education",
+                            "grocery",
+                            "hospitals",
+                            "pharmacies",
+                            "urgent_care_facilities",
+                            "early_voting",
+                        ],
+                        n=1,
+                    ).data
+                    auto_t1.columns = [f"{c}_t1_auto" for c in auto_t1.columns]
+
+                    print(f"    {run_key}: Computing AUTO t3 measures")
+                    auto_t3 = auto_ac.cost_to_closest(
+                        "travel_time",
+                        [
+                            "education",
+                            "grocery",
+                            "hospitals",
+                            "pharmacies",
+                            "urgent_care_facilities",
+                        ],
+                        n=3,
+                    ).data
+                    auto_t3.columns = [f"{c}_t3_auto" for c in auto_t3.columns]
+
+                    df = auto_c15.join(auto_c30)
+                    df = df.join(auto_c45)
+                    df = df.join(auto_c60)
+                    df = df.join(auto_c90)
+                    df = df.join(auto_t1)
+                    df = df.join(auto_t3)
+
+                    df = df.reset_index().rename(columns={"from_id": "BG20"})
+                    print("Saving access output to", run_folder)
+                    df.to_csv(os.path.join(run_folder, "access_auto.csv"), index=False)
+                    del df
 
             if region["equity"]:
-                # Compute equity summaries
-                raise NotImplementedError
+                print("Computing equity summary metrics")
+                for run_key, run in region["runs"].items():
+                    run_folder = os.path.join(region_folder, run_key)
+                    print(f"    {run_key}: Output folder is", run_folder)
+                    access = traccess.Access.from_csv(
+                        os.path.join(run_folder, "access.csv"),
+                        id_column="BG20",
+                        dtype={"BG20": str},
+                    )
+                    demographics = traccess.Demographic.from_csv(
+                        region_config["demographics"],
+                        id_column="BG20",
+                        dtype={"BG20": str},
+                    )
+                    ec = traccess.EquityComputer(
+                        access=access, demographic=demographics
+                    )
+                    all = []
+                    for c in access.columns:
+                        all.append(ec.weighted_average(c).to_frame())
+
+                    all = pandas.concat(all, axis="columns")
+                    all = all.rename_axis("demographic")
+                    all.to_csv(os.path.join(run_folder, "summary.csv"))
 
     def run_matrix(
         self, region, centroids, gtfs_folder, region_folder, runs, output_name
@@ -506,6 +635,6 @@ def create_run_yamls_from_csv(
         )
 
         config["description"] = f"Analysis for {region_key} on {run['week_of']}"
-        outname = f"{run['week_of']}-{region_key}-MX-TSI.yaml"
+        outname = f"{run['week_of']}-{region_key}.yaml"
         with open(os.path.join(runs_folder, region_key, outname), "w") as outfile:
             yaml.dump(config, outfile)

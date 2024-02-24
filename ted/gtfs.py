@@ -263,7 +263,10 @@ def remove_premium_routes_from_gtfs(
                         copy = GTFS.load_zip(curr_zip_dir)
                         if not os.path.exists(dated_output_path):
                             os.mkdir(dated_output_path)
-                        shutil.copy(curr_zip_dir, os.path.join(dated_output_path, curr_zip_entry))
+                        shutil.copy(
+                            curr_zip_dir,
+                            os.path.join(dated_output_path, curr_zip_entry),
+                        )
                 except zipfile.BadZipFile:
                     print(curr_zip_entry, "is not a zipfile, skipping...")
 
@@ -341,6 +344,18 @@ def check_valid_dates(gtfs_folder: str, week_of_deltas: list[int]):
     print("Finished check_valid_dates")
 
 
+def remove_stop_timezone_and_fix_nan(gtfs_folder):
+    print("--> Cleaning Timezone and NAN values <--")
+    for f in os.listdir(gtfs_folder):
+        print(f)
+        for gtfs in os.listdir(os.path.join(gtfs_folder, f)):
+            print(" ", gtfs)
+            g = GTFS.load_zip(
+                os.path.join(gtfs_folder, f, gtfs), ignore_optional_files="all"
+            )
+            g.write_zip(os.path.join(gtfs_folder, f, gtfs))
+
+
 def keep_only_feeds_in(gtfs_folder, feed_ids, include_zero=True):
     if include_zero and 0 not in feed_ids:
         feed_ids.append(0)
@@ -355,8 +370,12 @@ def keep_only_feeds_in(gtfs_folder, feed_ids, include_zero=True):
                 os.remove(os.path.join(date_folder, feed))
 
 
-def extend_calendar_dates(gtfs_folder, output_folder, days_ahead_to_extend):
+def extend_calendar_dates_and_simplify(
+    gtfs_folder, output_folder, days_ahead_to_extend
+):
     """Extend GTFS files as needed to cover analysis dates.
+
+    Also simplifies the GTFS files into only the needed files.
 
     Parameters
     ----------
@@ -376,7 +395,7 @@ def extend_calendar_dates(gtfs_folder, output_folder, days_ahead_to_extend):
             os.mkdir(output_week_folder)
         for feed in os.listdir(os.path.join(gtfs_folder, week_of)):
             print(" ", feed)
-            gtfs = GTFS.load_zip(os.path.join(gtfs_folder, week_of, feed))
+            gtfs = GTFS.load_zip(os.path.join(gtfs_folder, week_of, feed), ignore_optional_files="keep_shapes")
             summary = gtfs.summary()
             min_feed_date = datetime.datetime.strptime(
                 summary["first_date"], "%Y%m%d"

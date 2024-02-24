@@ -10,6 +10,7 @@ demographic_categories = {
     "B03002_006E": "Asian",
     "B03002_012E": "Hispanic or Latino",
     "C17002_003E": "In Poverty",
+    "B03002_012E": "Single Mother",
 }
 
 total_hhld = "B11001_001E"
@@ -28,6 +29,15 @@ age_categories = [
     "B01001_047E",
     "B01001_048E",
     "B01001_049E",
+]
+
+poverty_categories = [
+    "C17002_002E",
+    "C17002_003E",
+    "C17002_004E",
+    "C17002_005E",
+    "C17002_006E",
+    "C17002_007E",
 ]
 
 
@@ -135,7 +145,9 @@ def get_jobs_by_year(
     return merged
 
 
-def fetch_demographic_data(block_groups: pandas.DataFrame) -> pandas.DataFrame:
+def download_demographic_data(
+    block_groups: pandas.DataFrame, output_filepath: str
+) -> pandas.DataFrame:
     """Fetch demographic data based on provided study area
 
     Returns
@@ -147,8 +159,8 @@ def fetch_demographic_data(block_groups: pandas.DataFrame) -> pandas.DataFrame:
     # Read in the analysis centroids
     # api_key = self.settings["api_key"]
     print("Downloading demographic data")
-    block_groups["state"] = block_groups["bg_id"].str[:2]
-    block_groups["county"] = block_groups["bg_id"].str[2:5]
+    block_groups["state"] = block_groups["BG20"].str[:2]
+    block_groups["county"] = block_groups["BG20"].str[2:5]
     states_and_counties = (
         block_groups[["state", "county"]].drop_duplicates().sort_values("state")
     )
@@ -186,6 +198,26 @@ def fetch_demographic_data(block_groups: pandas.DataFrame) -> pandas.DataFrame:
 
         data = pandas.merge(data, age_data[["age_65p", "GEOID"]], on="GEOID")
 
+        # Now we do low income data
+        low_income_data = get_census(
+            dataset="acs/acs5",
+            year="2021",
+            variables=poverty_categories,
+            params={
+                "for": "block group:*",
+                "in": f"state:{area['state']} county:{area['county']}",
+            },
+            return_geoid=True,
+        )
+        low_income_data[poverty_categories] = low_income_data[
+            poverty_categories
+        ].astype(int)
+        low_income_data["low_income"] = low_income_data[poverty_categories].sum(
+            axis="columns"
+        )
+
+        data = pandas.merge(data, low_income_data[["low_income", "GEOID"]], on="GEOID")
+
         all_hhld = get_census(
             dataset="acs/acs5",
             year="2021",
@@ -203,9 +235,9 @@ def fetch_demographic_data(block_groups: pandas.DataFrame) -> pandas.DataFrame:
         )
         all_hhld = pandas.merge(all_hhld, all_hhld_gb, how="left", on="tract_id")
         # Create a proportion table for assignment
-        all_hhld.columns = ["bg_hhld", "bg_id", "tract_id", "tract_hhld"]
+        all_hhld.columns = ["bg_hhld", "BG20", "tract_id", "tract_hhld"]
         all_hhld["proportion"] = all_hhld["bg_hhld"] / all_hhld["tract_hhld"]
-        all_hhld = all_hhld[["bg_id", "tract_id", "proportion"]]
+        all_hhld = all_hhld[["BG20", "tract_id", "proportion"]]
 
         # Zero-car HHLD data
         zc_hhld = get_census(
@@ -227,24 +259,28 @@ def fetch_demographic_data(block_groups: pandas.DataFrame) -> pandas.DataFrame:
         zc_all["zero_car_hhld"] = zc_all["zero_car_hhld"].fillna(0).round().astype(int)
 
         # Rename columns back to match the pattern above
-        zc_all = zc_all[["bg_id", "zero_car_hhld"]]
-        zc_all = zc_all.rename(columns={"bg_id": "GEOID"})
+        zc_all = zc_all[["BG20", "zero_car_hhld"]]
+        zc_all = zc_all.rename(columns={"BG20": "GEOID"})
 
         data = pandas.merge(data, zc_all[["GEOID", "zero_car_hhld"]], on="GEOID")
 
         all_data.append(data)
+
+        # Make sure they're numbers or summing goes very badly
+        age_data[age_categories] = age_data[age_categories].astype(int)
+        age_data["age_65p"] = age_data[age_categories].sum(axis="columns")
 
     result = pandas.concat(all_data, axis="index")
 
     # Now let's do the age one
 
     # Rename our GEOID
-    result = result.rename(columns={"GEOID": "bg_id"})
-    result = result[result["bg_id"].isin(block_groups["bg_id"])]
-    # Move the bg_id column to the front
-    bg_column = result.pop("bg_id")
-    result.insert(0, "bg_id", bg_column)
-    # result.to_csv(os.path.join(self.cache_folder, DEMOGRAPHICS_FILENAME), index=False)
+    result = result.rename(columns={"GEOID": "BG20"})
+    result = result[result["BG20"].isin(block_groups["BG20"])]
+    # Move the BG20 column to the front
+    bg_column = result.pop("BG20")
+    result.insert(0, "BG20", bg_column)
+    result.to_csv(output_filepath, index=False)
     print("  Finished downloading demographic data")
     return result
 
