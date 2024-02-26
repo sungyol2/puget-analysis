@@ -6,7 +6,7 @@ import zipfile
 from tqdm import tqdm
 
 AUTO_DATA_FOLDER = "/home/willem/Documents/Project/TED/data/raw/auto"
-REGION = "SFO"
+REGION = "LA"
 TOD = "WEDPM"
 AUTO_OUT_FILE = (
     f"/home/willem/Documents/Project/TED/data/region/{REGION}/auto/{TOD}.parquet"
@@ -19,6 +19,7 @@ print("Assembling Parquet Files")
 for f in tqdm(z.namelist(), total=len(z.namelist())):
     if f.endswith(".parquet"):
         df = pandas.read_parquet(z.open(f))
+        df["Total_Time"] = df.Total_Time.round(0)
         dfs.append(df)
 
 print("Concatenating")

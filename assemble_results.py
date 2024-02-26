@@ -7,7 +7,7 @@ import pandas
 from tqdm import tqdm
 
 REGION = "CHI"
-TOD = "WEDAM"
+TOD = "WEDPM"
 DATA_FOLDER = "/home/willem/Documents/Project/TED/data/"
 
 # PACKAGE SUMMARIES

@@ -5,7 +5,7 @@ import subprocess
 
 from ted.config import MAPBOX_API_KEY
 
-REGION = "WAS"
+REGION = "CHI"
 UPLOAD_FOLDER = "/home/willem/Documents/Project/TED/data/upload"
 USERNAME = "wklumpen"
 
@@ -53,8 +53,8 @@ for upload in os.listdir(os.path.join(UPLOAD_FOLDER, "geojson")):
 
         print()
         print("  Publishing Tileset")
-        publish_tileset_string = (
-            f"tilesets publish {USERNAME}.{source_name}-tiles".split(" ")
+        publish_tileset_string = f"tilesets publish {USERNAME}.{source_name}-tiles --token {MAPBOX_API_KEY}".split(
+            " "
         )
         subprocess.run(publish_tileset_string)
 
