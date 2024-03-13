@@ -22,7 +22,9 @@ from gtfslite.gtfs import GTFS
 MOBILITY_CATALOG_URL = "https://bit.ly/catalogs-csv"
 
 
-def download_gtfs_using_yaml(yaml_path: str, output_folder: str, custom_mdb_path=None):
+def download_gtfs_using_yaml(
+    yaml_path: str, output_folder: str, output_results_file: str, custom_mdb_path=None
+):
     with open(yaml_path) as infile:
         config = yaml.safe_load(infile)
 
@@ -85,7 +87,7 @@ def download_gtfs_using_yaml(yaml_path: str, output_folder: str, custom_mdb_path
             print("  URLERROR")
 
     result_df = pandas.DataFrame(result_data)
-    result_df.to_csv(os.path.join(output_folder, "download_results.csv"), index=False)
+    result_df.to_csv(output_results_file, index=False)
 
 
 def fetch_mobility_database() -> pandas.DataFrame:
@@ -221,58 +223,46 @@ def remove_premium_routes_from_gtfs(
         This must specify a csv file and the csv should be formatted into 'route_slug, route_id' columns
 
     """
+    print("Removing Premium Routes from GTFS")
     premium_routes = pandas.read_csv(premium_routes_path, index_col=False)
     if not os.path.exists(output_folder):
         os.mkdir(output_folder)
-    dated_entries = os.listdir(gtfs_folder)
 
-    # Iterate through all dated entries
-    for curr_dated_entry in dated_entries:
-        # Make target output folder with the '-limited' tag
-        dated_output_path = os.path.join(output_folder, curr_dated_entry + "-limited")
-        if not os.path.exists(dated_output_path):
-            os.mkdir(dated_output_path)
-        zip_entries = os.listdir(os.path.join(gtfs_folder, curr_dated_entry))
-        # Iterate through .zip entries
-        for curr_zip_entry in zip_entries:
-            # Find entry zip folder
-            curr_zip_dir = os.path.join(gtfs_folder, curr_dated_entry, curr_zip_entry)
-            curr_zip_slug = curr_zip_entry.removesuffix(".zip")
+    zip_entries = os.listdir(gtfs_folder)
+    # Iterate through .zip entries
+    for curr_zip_entry in zip_entries:
+        # Find entry zip folder
+        curr_zip_dir = os.path.join(gtfs_folder, curr_zip_entry)
+        curr_zip_slug = curr_zip_entry.removesuffix(".zip")
 
-            if not (curr_zip_entry.startswith("._")):
-                print("Currently parsing: " + curr_dated_entry + ": " + curr_zip_entry)
+        if not (curr_zip_entry.startswith("._")):
+            print("Currently parsing:", curr_zip_entry)
 
-            premium_slug_rows = premium_routes.loc[
-                premium_routes["route_slug"] == curr_zip_slug
-            ]
-            slug_premium_ids = (premium_slug_rows.iloc[:, 1]).tolist()
+        premium_slug_rows = premium_routes.loc[
+            premium_routes["route_slug"] == curr_zip_slug
+        ]
+        slug_premium_ids = (premium_slug_rows.iloc[:, 1]).tolist()
 
-            # Skip slug labelled __ALL__
-            if "__ALL__" in slug_premium_ids:
-                print(curr_zip_slug + " is a premium feed, skipping...")
-            # delete specific routes within the given slug
-            else:
-                try:
-                    if (
-                        curr_zip_slug in premium_routes["route_slug"].values
-                    ):  # delete premium routes if it exists
-                        remove_routes_from_gtfs(
-                            curr_zip_dir, dated_output_path, slug_premium_ids
-                        )
-                    else:  # not a feed containing premium routes: copy over current feed as is
-                        copy = GTFS.load_zip(curr_zip_dir)
-                        if not os.path.exists(dated_output_path):
-                            os.mkdir(dated_output_path)
-                        shutil.copy(
-                            curr_zip_dir,
-                            os.path.join(dated_output_path, curr_zip_entry),
-                        )
-                except zipfile.BadZipFile:
-                    print(curr_zip_entry, "is not a zipfile, skipping...")
+        # Skip slug labelled __ALL__
+        if "__ALL__" in slug_premium_ids:
+            print(curr_zip_slug + " is a premium feed, skipping...")
+        # delete specific routes within the given slug
+        else:
+            try:
+                if (
+                    curr_zip_slug in premium_routes["route_slug"].values
+                ):  # delete premium routes if it exists
+                    remove_routes_from_gtfs(
+                        curr_zip_dir, output_folder, slug_premium_ids
+                    )
+                else:  # not a feed containing premium routes: copy over current feed as is
+                    shutil.copy(
+                        curr_zip_dir,
+                        os.path.join(output_folder, curr_zip_entry),
+                    )
+            except zipfile.BadZipFile:
+                print(curr_zip_entry, "is not a zipfile, skipping...")
 
-            if not (curr_zip_entry.startswith("._")):
-                print("Finished parsing: " + curr_zip_entry)
-        print("\n       ---Finished parsing feed: " + curr_dated_entry + "---\n")
     print(f"Done removing premium routes from {gtfs_folder}!")
 
 
@@ -371,7 +361,7 @@ def keep_only_feeds_in(gtfs_folder, feed_ids, include_zero=True):
 
 
 def extend_calendar_dates_and_simplify(
-    gtfs_folder, output_folder, days_ahead_to_extend
+    base_gtfs_folder, output_folder, monday, days_ahead_to_extend
 ):
     """Extend GTFS files as needed to cover analysis dates.
 
@@ -379,45 +369,48 @@ def extend_calendar_dates_and_simplify(
 
     Parameters
     ----------
-    gtfs_folder : str
+    base_gtfs_folder : str
         The path to the existing gtfs files
     output_folder : str
         A folder to put the updated GTFS files
+    monday: datetime.date
+        The datetime date of the monday of the run.
     days_ahead_to_extend : int
         The number of days ahead of the folder date to check
     """
-    for week_of in os.listdir(gtfs_folder):
-        print(f"Checking {week_of}")
-        min_date = datetime.datetime.strptime(week_of, "%Y-%m-%d").date()
-        max_date = min_date + datetime.timedelta(days=days_ahead_to_extend)
-        output_week_folder = os.path.join(output_folder, week_of)
-        if not os.path.exists(output_week_folder):
-            os.mkdir(output_week_folder)
-        for feed in os.listdir(os.path.join(gtfs_folder, week_of)):
-            print(" ", feed)
-            gtfs = GTFS.load_zip(os.path.join(gtfs_folder, week_of, feed), ignore_optional_files="keep_shapes")
-            summary = gtfs.summary()
-            min_feed_date = datetime.datetime.strptime(
-                summary["first_date"], "%Y%m%d"
-            ).date()
-            max_feed_date = datetime.datetime.strptime(
-                summary["last_date"], "%Y%m%d"
-            ).date()
-            print("    Min:", min_feed_date, "vs what we want which is", min_date)
-            print("    Max:", max_feed_date, "vs what we want which is", max_date)
-            if min_feed_date > min_date:
-                if gtfs.calendar is not None:
-                    gtfs.calendar["start_date"] = min_date.strftime("%Y%m%d")
-                    print("    Extended", feed, "start date")
-                else:
-                    print("    Want to extend minimum, no calendar file")
-            if max_feed_date < max_date:
-                if gtfs.calendar is not None:
-                    gtfs.calendar["end_date"] = max_date.strftime("%Y%m%d")
-                    print("    Extended", feed, "end date")
-                else:
-                    print("    Want to extend maximum, no calendar file")
-            gtfs.write_zip(os.path.join(output_week_folder, feed))
+    print("Extending Calendar Dates and Simplifying")
+    min_date = monday
+    max_date = min_date + datetime.timedelta(days=days_ahead_to_extend)
+    if not os.path.exists(output_folder):
+        os.mkdir(output_folder)
+    for feed in os.listdir(base_gtfs_folder):
+        print(" ", feed)
+        gtfs = GTFS.load_zip(
+            os.path.join(base_gtfs_folder, feed),
+            ignore_optional_files="keep_shapes",
+        )
+        summary = gtfs.summary()
+        min_feed_date = datetime.datetime.strptime(
+            summary["first_date"], "%Y%m%d"
+        ).date()
+        max_feed_date = datetime.datetime.strptime(
+            summary["last_date"], "%Y%m%d"
+        ).date()
+        print("    Min:", min_feed_date, "vs what we want which is", min_date)
+        print("    Max:", max_feed_date, "vs what we want which is", max_date)
+        if min_feed_date > min_date:
+            if gtfs.calendar is not None:
+                gtfs.calendar["start_date"] = min_date.strftime("%Y%m%d")
+                print("    Extended", feed, "start date")
+            else:
+                print("    Want to extend minimum, no calendar file")
+        if max_feed_date < max_date:
+            if gtfs.calendar is not None:
+                gtfs.calendar["end_date"] = max_date.strftime("%Y%m%d")
+                print("    Extended", feed, "end date")
+            else:
+                print("    Want to extend maximum, no calendar file")
+        gtfs.write_zip(os.path.join(output_folder, feed))
 
 
 def stops_in_block_groups(

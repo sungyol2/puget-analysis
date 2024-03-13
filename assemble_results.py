@@ -7,7 +7,7 @@ import pandas
 from tqdm import tqdm
 
 REGION = "CHI"
-TOD = "WEDPM"
+TOD = "WEDAM"
 DATA_FOLDER = "/home/willem/Documents/Project/TED/data/"
 
 # PACKAGE SUMMARIES
@@ -22,6 +22,8 @@ for run in os.listdir(os.path.join(DATA_FOLDER, "results")):
             df = pandas.read_csv(summary_file)
             df["date"] = date
             dfs.append(df)
+        else:
+            print("Missing summary file for", run)
 
 all = pandas.concat(dfs, axis="index")
 all.to_csv(

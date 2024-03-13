@@ -9,8 +9,7 @@ demographic_categories = {
     "B03002_004E": "Black People",
     "B03002_006E": "Asian",
     "B03002_012E": "Hispanic or Latino",
-    "C17002_003E": "In Poverty",
-    "B03002_012E": "Single Mother",
+    "B11003_016E": "Single Mother",
 }
 
 total_hhld = "B11001_001E"

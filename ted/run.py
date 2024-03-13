@@ -536,7 +536,6 @@ class Run:
                     all = []
                     for c in access.columns:
                         all.append(ec.weighted_average(c).to_frame())
-
                     all = pandas.concat(all, axis="columns")
                     all = all.rename_axis("demographic")
                     all.to_csv(os.path.join(run_folder, "summary.csv"))
@@ -658,3 +657,41 @@ def create_run_yamls_from_csv(
         outname = f"{run['week_of']}-{region_key}.yaml"
         with open(os.path.join(runs_folder, region_key, outname), "w") as outfile:
             yaml.dump(config, outfile)
+
+
+def create_run_yaml(
+    region_keys,
+    template_yaml_path,
+    results_folder,
+    runs_folder,
+    week_of,
+    wedam: datetime.datetime,
+    wedpm: datetime.datetime,
+    satam: datetime.datetime,
+    full_matrix: bool = False,
+    limited_matrix: bool = False,
+    tsi: bool = False,
+    access: bool = False,
+    equity: bool = False,
+):
+    with open(template_yaml_path) as infile:
+        config = yaml.safe_load(infile)
+
+    config["week_of"] = week_of
+    config["run_id"] = f"{week_of}-ALL"
+
+    for region_key in region_keys:
+        config["regions"][region_key]["access"] = access
+        config["regions"][region_key]["equity"] = equity
+        config["regions"][region_key]["full_matrix"] = full_matrix
+        config["regions"][region_key]["limited_matrix"] = limited_matrix
+        config["regions"][region_key]["tsi"] = tsi
+        config["regions"][region_key]["runs"]["SATAM"] = satam
+        config["regions"][region_key]["runs"]["WEDAM"] = wedam
+        config["regions"][region_key]["runs"]["WEDPM"] = wedpm
+
+    config["description"] = f"Analysis for all regions on {week_of}"
+    outname = f"{week_of}-ALL.yaml"
+    print("Saving to", outname)
+    with open(os.path.join(runs_folder, outname), "w") as outfile:
+        yaml.dump(config, outfile)
