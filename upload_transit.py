@@ -2,39 +2,36 @@ import datetime
 import json
 import os
 import subprocess
+import time
 
 from ted.config import MAPBOX_API_KEY
 
-REGION = "NYC"
-UPLOAD_FOLDER = "/home/willem/Documents/Project/TED/data/upload"
-DATA_FOLDER_NAME = "hotfix"
+# REGION = "NYC"
+UPLOAD_FOLDER = "/home/willem/Documents/Project/TED/data/upload/transit/mapbox"
+RECIPES_FOLDER = "/home/willem/Documents/Project/TED/data/upload/recipes"
 USERNAME = "wklumpen"
 TEST_RUN = False
 
 uploads = []
 
-for upload in os.listdir(os.path.join(UPLOAD_FOLDER, DATA_FOLDER_NAME)):
-    if upload.startswith(REGION):
-        uploads.append(upload)
+for upload in os.listdir(UPLOAD_FOLDER):
+    uploads.append(upload)
 
 uploads = list(set(uploads))
 
 for upload in uploads:
     recipe = {"version": 1, "layers": {}}
     print("Uploading", upload)
-    date = upload.split("_")[1]
-    tod = upload.split("_")[2].split(".")[0]
+    region = upload.split("_")[0]
+    upload_file = os.path.join(UPLOAD_FOLDER, f"{upload}")
+    tileset_name = f"{region}-transit"
+    source_name = tileset_name
 
-    upload_file = os.path.join(UPLOAD_FOLDER, DATA_FOLDER_NAME, f"{upload}")
-    tileset_name = f"{REGION}-{date}-{tod}"
-
-    source_name = f"{REGION}-{date}-{tod}"
     upload_source_string = f"tilesets upload-source {USERNAME} --no-validation --replace --token {MAPBOX_API_KEY} {source_name} {upload_file}".split(
         " "
     )
     print()
     print("  Uploading Source")
-    print(" ", upload_source_string)
     if TEST_RUN == True:
         print(" ".join(upload_source_string))
     else:
@@ -45,21 +42,9 @@ for upload in uploads:
         "minzoom": 7,
         "maxzoom": 10,
         "tiles": {"layer_size": 2500},
-        "features": {
-            "id": ["get", "BG20"],
-            "simplification": {
-                "distance": [
-                    "case",
-                    ["==", ["zoom"], 10],
-                    5,
-                    100,
-                ],
-                "outward_only": True,
-            },
-        },
     }
 
-    recipe_filepath = os.path.join(UPLOAD_FOLDER, "recipes", f"{REGION}-recipe.json")
+    recipe_filepath = os.path.join(RECIPES_FOLDER, f"{region}-transit-recipe.json")
     with open(
         recipe_filepath,
         "w",
@@ -88,3 +73,5 @@ for upload in uploads:
     else:
         subprocess.run(publish_tileset_string)
     print()
+    print("Waiting 20 seconds...")
+    time.sleep(20)

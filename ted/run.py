@@ -517,19 +517,29 @@ class Run:
 
             if region["equity"]:
                 print("Computing equity summary metrics")
+                # Grab TSI
+                tsi = pandas.read_csv(
+                    os.path.join(region_folder, "tsi.csv"), dtype={"BG20": str}
+                )
                 for run_key, run in region["runs"].items():
                     run_folder = os.path.join(region_folder, run_key)
                     print(f"    {run_key}: Output folder is", run_folder)
-                    access = traccess.Access.from_csv(
-                        os.path.join(run_folder, "access.csv"),
-                        id_column="BG20",
-                        dtype={"BG20": str},
+                    acs_df = pandas.read_csv(
+                        os.path.join(run_folder, "access.csv"), dtype={"BG20": str}
                     )
-                    demographics = traccess.Demographic.from_csv(
+                    this_tsi = (
+                        tsi[["BG20", run_key]].copy().rename(columns={run_key: "tsi"})
+                    )
+
+                    acs_df = pandas.merge(acs_df, this_tsi, on="BG20")
+                    demo_df = pandas.read_csv(
                         region_config["demographics"],
-                        id_column="BG20",
                         dtype={"BG20": str},
                     )
+
+                    # First let's do it for the whole region
+                    access = traccess.Access(acs_df, id_column="BG20")
+                    demographics = traccess.Demographic(demo_df, id_column="BG20")
                     ec = traccess.EquityComputer(
                         access=access, demographic=demographics
                     )
@@ -538,7 +548,33 @@ class Run:
                         all.append(ec.weighted_average(c).to_frame())
                     all = pandas.concat(all, axis="columns")
                     all = all.rename_axis("demographic")
-                    all.to_csv(os.path.join(run_folder, "summary.csv"))
+                    all["area"] = "urban"
+
+                    # Next let's do the urban area
+                    city_bgs = pandas.read_csv(
+                        region_config["city"],
+                        dtype={"BG20": str},
+                    )
+                    access = traccess.Access(
+                        acs_df[acs_df["BG20"].isin(city_bgs["BG20"])], id_column="BG20"
+                    )
+                    demographics = traccess.Demographic(
+                        demo_df[demo_df["BG20"].isin(city_bgs["BG20"])],
+                        id_column="BG20",
+                    )
+                    ec = traccess.EquityComputer(
+                        access=access, demographic=demographics
+                    )
+                    city = []
+                    for c in access.columns:
+                        city.append(ec.weighted_average(c).to_frame())
+                    city = pandas.concat(city, axis="columns")
+                    city = city.rename_axis("demographic")
+                    city["area"] = "city"
+
+                    both = pandas.concat([all, city], axis="index")
+
+                    both.to_csv(os.path.join(run_folder, "summary.csv"))
 
     def run_matrix(
         self, region, centroids, gtfs_folder, region_folder, runs, output_name
@@ -618,6 +654,9 @@ def create_run_yamls_from_csv(
     tsi: bool = False,
     access: bool = False,
     equity: bool = False,
+    WEDAM=True,
+    WEDPM=True,
+    SATAM=True,
 ):
     run_catalog = pandas.read_csv(run_catalog_path)
     with open(template_yaml_path) as infile:
@@ -643,15 +682,19 @@ def create_run_yamls_from_csv(
             config["regions"][region_key]["full_matrix"] = full_matrix
         config["regions"][region_key]["limited_matrix"] = limited_matrix
         config["regions"][region_key]["tsi"] = tsi
-        config["regions"][region_key]["runs"]["SATAM"] = datetime.datetime.strptime(
-            run["SATAM"], "%Y-%m-%d %H:%M:%S"
-        )
-        config["regions"][region_key]["runs"]["WEDAM"] = datetime.datetime.strptime(
-            run["WEDAM"], "%Y-%m-%d %H:%M:%S"
-        )
-        config["regions"][region_key]["runs"]["WEDPM"] = datetime.datetime.strptime(
-            run["WEDPM"], "%Y-%m-%d %H:%M:%S"
-        )
+        config["regions"][region_key]["runs"] = {}
+        if SATAM == True:
+            config["regions"][region_key]["runs"]["SATAM"] = datetime.datetime.strptime(
+                run["SATAM"], "%Y-%m-%d %H:%M:%S"
+            )
+        if WEDAM == True:
+            config["regions"][region_key]["runs"]["WEDAM"] = datetime.datetime.strptime(
+                run["WEDAM"], "%Y-%m-%d %H:%M:%S"
+            )
+        if WEDPM == True:
+            config["regions"][region_key]["runs"]["WEDPM"] = datetime.datetime.strptime(
+                run["WEDPM"], "%Y-%m-%d %H:%M:%S"
+            )
 
         config["description"] = f"Analysis for {region_key} on {run['week_of']}"
         outname = f"{run['week_of']}-{region_key}.yaml"

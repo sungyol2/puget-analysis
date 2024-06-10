@@ -2,7 +2,7 @@ import pandas as pd
 import geopandas as gpd
 import altair as alt
 
-region_key = "SFO"
+region_key = "BOS"
 print("Running Quality Control on Auto Travel Times")
 for tod in ["WEDAM", "WEDPM", "SATAM"]:
     print(tod)

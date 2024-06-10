@@ -3,7 +3,7 @@ import os
 import pandas as pd
 import altair as alt
 
-REGION = "PHL"
+REGION = "SFO"
 DATA_FOLDER = "/home/willem/Documents/Project/TED/data/"
 
 demographic_categories = {
@@ -12,8 +12,7 @@ demographic_categories = {
     "B03002_004E": "Black ",
     "B03002_006E": "Asian",
     "B03002_012E": "Hispanic or Latino",
-    "C17002_003E": "In Poverty",
-    "B03002_012E": "Single Mother",
+    "B11003_016E": "Single Mother",
     "age_65p": "Age 65+",
     "zero_car_hhld": "Zero-Car Households",
     "low_income": "Low Income",

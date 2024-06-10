@@ -6,7 +6,7 @@ import zipfile
 from tqdm import tqdm
 
 AUTO_DATA_FOLDER = "/home/willem/Documents/Project/TED/data/raw/auto"
-REGION = "SFO"
+REGION = "BOS"
 TOD = "SATAM"
 AUTO_OUT_FILE = (
     f"/home/willem/Documents/Project/TED/data/region/{REGION}/auto/{TOD}.parquet"

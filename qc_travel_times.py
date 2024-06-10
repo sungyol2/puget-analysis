@@ -2,7 +2,7 @@ import pandas as pd
 import geopandas as gpd
 import altair as alt
 
-REGION = "PHL"
+REGION = "SFO"
 RUN_CATALOG_PATH = "/home/willem/Documents/Project/TED/data/run_catalog.csv"
 CENTRAL_BGS = {
     "CHI": "170318390004",
@@ -21,6 +21,7 @@ bgs = gpd.read_file(
 )
 
 run_catalog = pd.read_csv(RUN_CATALOG_PATH)
+run_catalog = run_catalog[run_catalog.week_of == "2020-08-17"]
 
 for idx, run in run_catalog.iterrows():
     week_of = run["week_of"]

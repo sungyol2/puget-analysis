@@ -14,12 +14,12 @@ from gtfslite import GTFS
 from ted.fare import *
 
 DATA_FOLDER = "/home/willem/Documents/Project/TED/data/"
-REGION = "PHL"
-TYPE = "full"
-YEAR = "2020"
-GTFS_DATE = "2020-02-24"
+REGION = "BOS"
+TYPE = "limited"
+YEAR = "2023"
+# GTFS_DATE = "2020-02-24"
 # GTFS_DATE = "2023-09-25"
-START_DATETIME = datetime.datetime(2020, 2, 26, 8)
+# START_DATETIME = datetime.datetime(2020, 2, 26, 8)
 # START_DATETIME = datetime.datetime(2023, 9, 27, 8)
 
 ############################
@@ -124,22 +124,7 @@ START_DATETIME = datetime.datetime(2020, 2, 26, 8)
 # )
 
 ######### Get unique routes or municipalities used
-get_unique_routes_used(
-    os.path.join(
-        DATA_FOLDER,
-        "region",
-        REGION,
-        "fare",
-        YEAR,
-        f"itineraries_{YEAR}_{TYPE}.parquet",
-    ),
-    os.path.join(
-        DATA_FOLDER, "region", REGION, "fare", f"{YEAR}_unique_routes_{TYPE}.csv"
-    ),
-)
-
-############ Compute a fare matrix from the fares
-# df = pandas.read_parquet(
+# get_unique_routes_used(
 #     os.path.join(
 #         DATA_FOLDER,
 #         "region",
@@ -147,40 +132,55 @@ get_unique_routes_used(
 #         "fare",
 #         YEAR,
 #         f"itineraries_{YEAR}_{TYPE}.parquet",
-#     )
-# ).rename(columns={"mode": "transport_mode"})
-
-# pairs = df.drop_duplicates(subset=["from_id", "to_id"])
-
-# fares = {"from_id": [], "to_id": [], "fare_cost": []}
-
-# print("Making Fare Matrix")
-# fare_db = f"/home/willem/Documents/Project/TED/data/region/{REGION}/fare/{YEAR}/{REGION}{YEAR[-2:]}.db"
-# print("DB:", fare_db)
-# df["feed"] = df["feed"].str.replace("gtfs-", "")
-# df["feed"] = df["feed"].str.replace(
-#     "california-golden-gate-ferry-0", "california-blue-gold-fleet-1178"
+#     ),
+#     os.path.join(
+#         DATA_FOLDER, "region", REGION, "fare", f"{YEAR}_unique_routes_{TYPE}.csv"
+#     ),
 # )
 
-# for idx, pair in tqdm(pairs.iterrows(), total=pairs.shape[0]):
-#     sub_df = df[(df.from_id == pair["from_id"]) & (df.to_id == pair["to_id"])].copy()
-#     if sub_df.shape[0] > 1:
-#         it = Itinerary(
-#             sub_df,
-#             REGION,
-#             fare_db,
-#         )
-#         it.clean()
-#         it.make_legs()
-#         fares["from_id"].append(pair["from_id"])
-#         fares["to_id"].append(pair["to_id"])
-#         fares["fare_cost"].append(it.compute_fare())
+############ Compute a fare matrix from the fares
+df = pandas.read_parquet(
+    os.path.join(
+        DATA_FOLDER,
+        "region",
+        REGION,
+        "fare",
+        YEAR,
+        f"itineraries_{YEAR}_{TYPE}.parquet",
+    )
+).rename(columns={"mode": "transport_mode"})
 
-# fare_df = pandas.DataFrame(fares)
-# fare_df.to_csv(
-#     f"/home/willem/Documents/Project/TED/data/region/{REGION}/fare/{YEAR}/fare_matrix_{YEAR}_{TYPE}.csv",
-#     index=False,
-# )
+pairs = df.drop_duplicates(subset=["from_id", "to_id"])
+
+fares = {"from_id": [], "to_id": [], "fare_cost": []}
+
+print("Making Fare Matrix")
+fare_db = f"/home/willem/Documents/Project/TED/data/region/{REGION}/fare/{YEAR}/{REGION}{YEAR[-2:]}.db"
+print("DB:", fare_db)
+df["feed"] = df["feed"].str.replace("gtfs-", "")
+df["feed"] = df["feed"].str.replace(
+    "california-golden-gate-ferry-0", "california-blue-gold-fleet-1178"
+)
+
+for idx, pair in tqdm(pairs.iterrows(), total=pairs.shape[0]):
+    sub_df = df[(df.from_id == pair["from_id"]) & (df.to_id == pair["to_id"])].copy()
+    if sub_df.shape[0] > 1:
+        it = Itinerary(
+            sub_df,
+            REGION,
+            fare_db,
+        )
+        it.clean()
+        it.make_legs()
+        fares["from_id"].append(pair["from_id"])
+        fares["to_id"].append(pair["to_id"])
+        fares["fare_cost"].append(it.compute_fare())
+
+fare_df = pandas.DataFrame(fares)
+fare_df.to_csv(
+    f"/home/willem/Documents/Project/TED/data/region/{REGION}/fare/{YEAR}/fare_matrix_{YEAR}_{TYPE}.csv",
+    index=False,
+)
 
 # ########## Map the fare matrix to the block groups
 map_fare_matrix_to_bg(

@@ -2,8 +2,8 @@ import pandas as pd
 import geopandas as gpd
 import altair as alt
 
-region_key = "PHL"
-fares_2023 = False
+region_key = "BOS"
+fares_2023 = True
 INFINITE_FARE = 9999
 CENTRAL_BGS = {
     "CHI": "170318390004",
@@ -11,6 +11,7 @@ CENTRAL_BGS = {
     "LA": "060372073062",
     "PHL": "421010005002",
     "NYC": "360610101001",
+    "BOS": "250250203041",
 }
 
 print("Loading Block Groups")

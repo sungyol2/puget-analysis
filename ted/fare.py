@@ -440,8 +440,9 @@ class Itinerary:
         try:
             start_zone = execute_sql(sql, self.db)[0][0]
         except IndexError:
-            print(f"{leg.feed} failed to find a zone for stop {leg.start_stop_id}")
-            raise IndexError
+            raise IndexError(
+                f"{leg.feed} failed to find a zone for stop {leg.start_stop_id}"
+            )
 
         sql = f"""
         SELECT zone_id

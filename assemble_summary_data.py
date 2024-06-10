@@ -6,7 +6,7 @@ import geopandas
 import pandas
 from tqdm import tqdm
 
-REGIONS = ["PHL", "CHI", "LA", "NYC", "SFO", "WAS"]
+REGIONS = ["BOS", "PHL", "CHI", "LA", "NYC", "SFO", "WAS"]
 DATA_FOLDER = "/home/willem/Documents/Project/TED/data/"
 
 # PACKAGE SUMMARIES
@@ -16,12 +16,13 @@ for region in REGIONS:
         dfs = []
         for run in os.listdir(os.path.join(DATA_FOLDER, "results")):
             if run.endswith(region):
-
+                print(run)
                 summary_file = os.path.join(
                     DATA_FOLDER, "results", run, region, tod, "summary.csv"
                 )
                 if os.path.exists(summary_file):
                     date = datetime.datetime.strptime(run, f"%Y-%m-%d-{region}")
+                    # print("Running", summary_file)
                     df = pandas.read_csv(summary_file)
                     df["date"] = date
                     dfs.append(df)
