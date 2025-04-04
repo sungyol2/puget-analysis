@@ -633,6 +633,7 @@ def create_folder_safely(folder_path: os.path):
         The path to the folder to create or check for existence
     """
     if not os.path.exists(folder_path):
+        print("Creating folder", folder_path)
         os.mkdir(folder_path)
 
 
@@ -723,6 +724,7 @@ def create_run_yaml(
     wedam: datetime.datetime,
     wedpm: datetime.datetime,
     satam: datetime.datetime,
+    out_tag="ALL",
     full_matrix: bool = False,
     limited_matrix: bool = False,
     tsi: bool = False,
@@ -733,7 +735,7 @@ def create_run_yaml(
         config = yaml.safe_load(infile)
 
     config["week_of"] = week_of
-    config["run_id"] = f"{week_of}-ALL"
+    config["run_id"] = f"{week_of}-{out_tag}"
 
     for region_key in region_keys:
         config["regions"][region_key]["access"] = access
@@ -746,7 +748,7 @@ def create_run_yaml(
         config["regions"][region_key]["runs"]["WEDPM"] = wedpm
 
     config["description"] = f"Analysis for all regions on {week_of}"
-    outname = f"{week_of}-ALL.yaml"
+    outname = f"{week_of}-{out_tag}.yaml"
     print("Saving to", outname)
     with open(os.path.join(runs_folder, outname), "w") as outfile:
         yaml.dump(config, outfile)
