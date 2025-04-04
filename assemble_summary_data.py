@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 REGIONS = ["BOS", "PHL", "CHI", "LA", "NYC", "SFO", "WAS"]
 DATA_FOLDER = "/home/willem/Documents/Project/TED/data/"
-
+REGIONS = ["CHI"]
 # PACKAGE SUMMARIES
 
 for region in REGIONS:

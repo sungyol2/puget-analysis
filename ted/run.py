@@ -56,7 +56,7 @@ class Run:
             run_id=c["run_id"],
             description=c["description"],
             output_folder=c["output_folder"],
-            week_of=c["week_of"],
+            week_of=c["week_of"].strftime("%Y-%m-%d"),
             regions=c["regions"],
         )
 
@@ -115,6 +115,7 @@ class Run:
                 areas = gpd.read_file(
                     region_config["gpkg"], layer=region_config["areas_layer"]
                 )
+                print(areas.crs)
                 areas.geometry = areas.geometry.buffer(TSI_BUFFER_SIZE)
                 runs = []
                 for run_key, run in region["runs"].items():
@@ -123,6 +124,10 @@ class Run:
                 # Now we get the stops in the region
                 gtfs_folder = os.path.join(region_config["gtfs"], "full", self.week_of)
                 all_stops = get_all_stops(gtfs_folder).to_crs(areas.crs)
+                all_stops.to_file(
+                    f"{region_config['code']}-allstops.gpkg", layer="all_stops"
+                )
+                print("Wrote file")
                 print("Starting TSI computation")
                 for agency in all_stops.agency.unique():
                     print("  Computing for", agency)
@@ -134,11 +139,18 @@ class Run:
                         left_df=agency_stops[["stop_id", "geometry"]],
                         right_df=areas[[BGNAME, "geometry"]],
                     )
+                    stops_per_bg = (
+                        joined[["BG20", "stop_id"]]
+                        .groupby("BG20", as_index=False)
+                        .count()
+                    )
+                    stops_per_bg.to_csv(f"{region_config['code']}-{agency}.csv")
+                    print("Wrote stops per bg for", agency)
                     # Let's get the TSI
                     for bg in joined.BG20.unique():
                         # print("  Checking", bg)
                         stops = joined[joined.BG20 == bg]["stop_id"].tolist()
-                        # print("  Found", len(stops), "stops.")
+                        # print(f"  {bg}: Found", len(stops), "stops.")
                         for run_key, run in region["runs"].items():
                             # print("    Checking on", run_key)
                             start_time = run

@@ -7,7 +7,7 @@ import pandas
 from tqdm import tqdm
 
 # REGIONS = ["BOS", "CHI", "LA", "PHL", "SFO", "WAS"]
-REGIONS = ["SFO", "NYC"]
+REGIONS = ["CHI"]
 DATA_FOLDER = "/home/willem/Documents/Project/TED/data/"
 
 dfs = []

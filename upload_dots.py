@@ -6,7 +6,7 @@ import time
 
 from ted.config import MAPBOX_API_KEY
 
-REGION = "NYC"
+REGION = "WAS"
 UPLOAD_FOLDER = "/home/willem/Documents/Project/TED/data/upload/dots/mapbox"
 RECIPES_FOLDER = "/home/willem/Documents/Project/TED/data/upload/recipes"
 USERNAME = "wklumpen"

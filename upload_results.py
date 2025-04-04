@@ -5,9 +5,9 @@ import subprocess
 
 from ted.config import MAPBOX_API_KEY
 
-REGION = "NYC"
+REGION = "CHI"
 UPLOAD_FOLDER = "/home/willem/Documents/Project/TED/data/upload"
-DATA_FOLDER_NAME = "hotfix"
+DATA_FOLDER_NAME = "chi-tsi"
 USERNAME = "wklumpen"
 TEST_RUN = False
 

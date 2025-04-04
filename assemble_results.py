@@ -7,7 +7,7 @@ import pandas
 from tqdm import tqdm
 
 # REGIONS = ["BOS", "CHI", "LA", "NYC", "PHL", "SFO", "WAS"]
-REGIONS = ["NYC"]
+REGIONS = ["CHI"]
 DATA_FOLDER = "/home/willem/Documents/Project/TED/data/"
 INCLUDE_SUMMARY = False
 INCLUDE_SCORES = True
