@@ -5,57 +5,79 @@ crs: EPSG:4326
 
 gtfs:
   consolidated:
-    name: "OTD Consolidated GTFS - Puget Sound"
-    url: "<CONSOLIDATED_GTFS_URL>"
-    license: "ODbL / Agency-specific"
-    notes: "Merged feed preferred."
+    name: "Puget Sound Consolidated GTFS (OTD)"
+    url: "https://gtfs.sound.obaweb.org/"
+    license: "See OTD Terms"
+    notes: "Single merged bundle maintained by Sound Transit OTD"
   agencies:
-    - { id: king_county_metro,   name: "King County Metro",                          url: "<KCM_GTFS_URL>" }
-    - { id: sound_transit,       name: "Sound Transit (Link, Sounder, T Line, STX)", url: "<ST_GTFS_URL>" }
-    - { id: community_transit,   name: "Community Transit",                           url: "<CT_GTFS_URL>" }
-    - { id: pierce_transit,      name: "Pierce Transit",                              url: "<PT_GTFS_URL>" }
-    - { id: kitsap_transit,      name: "Kitsap Transit",                              url: "<KT_GTFS_URL>" }
-    - { id: seattle_streetcar,   name: "Seattle Streetcar",                           url: "<SSC_GTFS_URL>",  optional: true }
-    - { id: seattle_monorail,    name: "Seattle Center Monorail",                     url: "<MONORAIL_GTFS_URL>", optional: true }
-    - { id: washington_state_ferries, name: "Washington State Ferries",               url: "<WSF_GTFS_URL>", optional: true }
+    - { id: king_county_metro, name: "King County Metro", url: "https://www.soundtransit.org/GTFS-KCM/google_transit.zip" }
+    - { id: sound_transit, name: "Sound Transit (rail + ST Express subset)", url: "https://www.soundtransit.org/GTFS-rail/40_gtfs.zip" }
+    - { id: community_transit, name: "Community Transit", url: "https://www.soundtransit.org/GTFS-CT/current.zip" }
+    - { id: pierce_transit, name: "Pierce Transit", url: "https://www.soundtransit.org/GTFS-PT/gtfs.zip" }
+    - { id: kitsap_transit, name: "Kitsap Transit", url: "https://gtfs.sound.obaweb.org/prod/20_gtfs.zip" }
+    - { id: seattle_streetcar, name: "Seattle Streetcar", url: "https://gtfs.sound.obaweb.org/prod/23_gtfs.zip", optional: true }
+    - { id: seattle_monorail, name: "Seattle Center Monorail", url: "https://gtfs.sound.obaweb.org/prod/96_gtfs.zip", optional: true }
+    - { id: washington_state_ferries, name: "Washington State Ferries", url: "https://gtfs.sound.obaweb.org/prod/95_gtfs.zip", optional: true }
   periods:
-    - { id: WEDAM, label: "Weekday AM",         start: "07:00", end: "09:00" }
-    - { id: WEDPM, label: "Weekday Midday",     start: "09:00", end: "11:00" }
-    - { id: SATAM, label: "Saturday Late AM",   start: "10:00", end: "12:00" }
+    - { id: WEDAM, label: "Weekday AM",     start: "07:00", end: "09:00" }
+    - { id: WEDPM, label: "Weekday Midday", start: "09:00", end: "11:00" }
+    - { id: SATAM, label: "Saturday Late AM", start: "10:00", end: "12:00" }
   reference_date: "2025-03-24"
 
 osm:
   provider: "Geofabrik"
   url: "https://download.geofabrik.de/north-america/us/washington-latest.osm.pbf"
-  notes: "Use for R5 walking + auto graph build."
+  notes: "Used to build walk/auto graphs (Valhalla/OSRM/OTP)"
 
 boundaries:
-  block_groups: { source: "TIGER/Line 2024/2025", url: "<TIGER_BG_URL>", filter: "WA only" }
-  places:       { source: "TIGER Places",         url: "<TIGER_PLACES_URL>" }
-  study_boundary: { source: "PSRC Open Data",     url: "<PSRC_REGION_BOUNDARY_URL>" }
+  block_groups:
+    source: "TIGER/Line 2024"
+    url: "https://www2.census.gov/geo/tiger/TIGER2024/BG/tl_2024_53_bg.zip"
+    filter: "Washington State only"
+  places:
+    source: "TIGER/Line 2024"
+    url: "https://www2.census.gov/geo/tiger/TIGER2024/PLACE/tl_2024_53_place.zip"
+  study_boundary:
+    source: "PSRC Regional Geographies"
+    url: "https://psrc-psregcncl.hub.arcgis.com/datasets/PSREGCNCL::regional-geographies/about"
 
 acs:
   year: 2023
   span: 5
+  api_base: "https://api.census.gov/data/2023/acs/acs5"
   variables:
     total_pop: "B01003_001E"
   geography: "Block Group"
   fetch: "Census API"
 
 opportunities:
-  jobs:          { source: "LEHD LODES v8 (WA)",           url: "<LODES_URL>", type: "workplace_counts" }
-  supermarkets:  { source: "USDA SNAP Authorized Retailers", url: "<USDA_SNAP_URL>" }
-  hospitals:     { source: "HIFLD Hospitals",               url: "<HIFLD_HOSPITALS_URL>" }
-  pharmacies:    { source: "RxOpen Pharmacies",             url: "<RXOPEN_URL>" }
-  parks:         { source: "TPL ParkServe or USGS PAD-US",  url: "<PARKSERVE_OR_PADUS_URL>" }
-  post_secondary:{ source: "IPEDS (NCES)",                  url: "<IPEDS_LOCATIONS_URL>" }
+  jobs:
+    source: "LEHD LODES v8 (WA)"
+    url: "https://lehd.ces.census.gov/data/lodes/LODES8/wa/"
+    type: "workplace_counts"
+  supermarkets:
+    source: "USDA SNAP Authorized Retailers (historical CSV)"
+    url: "https://www.fns.usda.gov/snap/retailer-locator/data"
+  hospitals:
+    source: "HIFLD Hospitals"
+    url: "https://www.arcgis.com/home/item.html?id=2472af42490543559db60cb3adea764b"
+  pharmacies:
+    source: "RxOpen facilities CSV (when available)"
+    url: "https://rxopen.org/api/v1/map/download/facility"
+    notes: "Use cautiously; availability varies; fallback to local lists if unavailable"
+  parks:
+    source: "Trust for Public Land — ParkServe"
+    url: "https://www.tpl.org/park-data-downloads"
+  post_secondary:
+    source: "NCES / IPEDS (EDGE) — Postsecondary School Locations 2022–23"
+    url: "https://catalog.data.gov/dataset/postsecondary-school-locations-2022-23"
 
 auto_travel:
-  engine: "valhalla"         # or "osrm" if they support it out-of-the-box; ArcGIS/HERE if licensed
+  engine: "valhalla"             # keep consistent with upstream if supported
   traffic: "static"
 
 fares:
-  engine: "otp"
+  engine: "otp"                   # mirror TransitCenter’s setup
   agencies: ["KCM","ST","CT","PT","KT","SSC","MONO","WSF"]
   transfer_window_minutes: 120
   premium_modes: ["Sounder","WSF"]
