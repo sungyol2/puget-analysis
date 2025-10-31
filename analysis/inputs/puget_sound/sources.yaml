@@ -1,0 +1,74 @@
+region: puget_sound
+region_label: Puget Sound (PSRC)
+counties: [King, Pierce, Snohomish, Kitsap]
+crs: EPSG:4326
+
+gtfs:
+  consolidated:
+    name: "OTD Consolidated GTFS - Puget Sound"
+    url: "<CONSOLIDATED_GTFS_URL>"
+    license: "ODbL / Agency-specific"
+    notes: "Merged feed preferred."
+  agencies:
+    - { id: king_county_metro,   name: "King County Metro",                          url: "<KCM_GTFS_URL>" }
+    - { id: sound_transit,       name: "Sound Transit (Link, Sounder, T Line, STX)", url: "<ST_GTFS_URL>" }
+    - { id: community_transit,   name: "Community Transit",                           url: "<CT_GTFS_URL>" }
+    - { id: pierce_transit,      name: "Pierce Transit",                              url: "<PT_GTFS_URL>" }
+    - { id: kitsap_transit,      name: "Kitsap Transit",                              url: "<KT_GTFS_URL>" }
+    - { id: seattle_streetcar,   name: "Seattle Streetcar",                           url: "<SSC_GTFS_URL>",  optional: true }
+    - { id: seattle_monorail,    name: "Seattle Center Monorail",                     url: "<MONORAIL_GTFS_URL>", optional: true }
+    - { id: washington_state_ferries, name: "Washington State Ferries",               url: "<WSF_GTFS_URL>", optional: true }
+  periods:
+    - { id: WEDAM, label: "Weekday AM",         start: "07:00", end: "09:00" }
+    - { id: WEDPM, label: "Weekday Midday",     start: "09:00", end: "11:00" }
+    - { id: SATAM, label: "Saturday Late AM",   start: "10:00", end: "12:00" }
+  reference_date: "2025-03-24"
+
+osm:
+  provider: "Geofabrik"
+  url: "https://download.geofabrik.de/north-america/us/washington-latest.osm.pbf"
+  notes: "Use for R5 walking + auto graph build."
+
+boundaries:
+  block_groups: { source: "TIGER/Line 2024/2025", url: "<TIGER_BG_URL>", filter: "WA only" }
+  places:       { source: "TIGER Places",         url: "<TIGER_PLACES_URL>" }
+  study_boundary: { source: "PSRC Open Data",     url: "<PSRC_REGION_BOUNDARY_URL>" }
+
+acs:
+  year: 2023
+  span: 5
+  variables:
+    total_pop: "B01003_001E"
+  geography: "Block Group"
+  fetch: "Census API"
+
+opportunities:
+  jobs:          { source: "LEHD LODES v8 (WA)",           url: "<LODES_URL>", type: "workplace_counts" }
+  supermarkets:  { source: "USDA SNAP Authorized Retailers", url: "<USDA_SNAP_URL>" }
+  hospitals:     { source: "HIFLD Hospitals",               url: "<HIFLD_HOSPITALS_URL>" }
+  pharmacies:    { source: "RxOpen Pharmacies",             url: "<RXOPEN_URL>" }
+  parks:         { source: "TPL ParkServe or USGS PAD-US",  url: "<PARKSERVE_OR_PADUS_URL>" }
+  post_secondary:{ source: "IPEDS (NCES)",                  url: "<IPEDS_LOCATIONS_URL>" }
+
+auto_travel:
+  engine: "valhalla"         # or "osrm" if they support it out-of-the-box; ArcGIS/HERE if licensed
+  traffic: "static"
+
+fares:
+  engine: "otp"
+  agencies: ["KCM","ST","CT","PT","KT","SSC","MONO","WSF"]
+  transfer_window_minutes: 120
+  premium_modes: ["Sounder","WSF"]
+  affordability_threshold_usd: 5.00
+
+cities:
+  - { name: "Seattle",      lat: 47.6062, lon: -122.3321, pop: 816600, year: 2025 }
+  - { name: "Tacoma",       lat: 47.2529, lon: -122.4443, pop: 228400, year: 2024 }
+  - { name: "Bellevue",     lat: 47.6101, lon: -122.2015, pop: 158000, year: 2025 }
+  - { name: "Kent",         lat: 47.3809, lon: -122.2348, pop: 136500, year: 2025 }
+  - { name: "Everett",      lat: 47.9789, lon: -122.2021, pop: 113000, year: 2025 }
+  - { name: "Renton",       lat: 47.4829, lon: -122.2171, pop: 105000, year: 2025 }
+  - { name: "Federal Way",  lat: 47.3130, lon: -122.3393, pop: 100000, year: 2025 }
+  - { name: "Kirkland",     lat: 47.6769, lon: -122.2060, pop: 96000,  year: 2025 }
+  - { name: "Auburn",       lat: 47.3073, lon: -122.2280, pop: 85000,  year: 2025 }
+  - { name: "Redmond",      lat: 47.6730, lon: -122.1215, pop: 84400,  year: 2025 }
